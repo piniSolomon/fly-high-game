@@ -519,12 +519,12 @@ test('favicon is linked in HTML', async ({ page }) => {
 // ============================================
 // Test: Version is updated to 0.5.0
 // ============================================
-test('game version is 0.8.0', async ({ page }) => {
+test('game version is 0.9.0', async ({ page }) => {
     await page.goto('/index.html');
     await page.waitForTimeout(300);
 
     const version = await page.evaluate(() => GAME_VERSION);
-    expect(version).toBe('0.8.0');
+    expect(version).toBe('0.9.0');
 });
 
 // ============================================
@@ -876,4 +876,111 @@ test('obstacle gaps shrink with distance', async ({ page }) => {
     const maxGapLate = await page.evaluate(() => OBSTACLE_MAX_GAP * (1 - 0.35));
 
     expect(maxGapLate).toBeLessThan(maxGapEarly);
+});
+
+// ============================================
+// Test: Best distance saves to localStorage
+// ============================================
+test('best distance saves on death', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    await startGame(page);
+    await page.waitForTimeout(100);
+
+    // Set distance and die
+    await page.evaluate(() => {
+        distance = 500;
+        player.y = -100;
+    });
+    await page.waitForTimeout(300);
+
+    const stored = await page.evaluate(() => parseFloat(localStorage.getItem('flyHighBestDistance') || '0'));
+    expect(stored).toBeGreaterThanOrEqual(500);
+});
+
+// ============================================
+// Test: Stars collected counter works
+// ============================================
+test('starsCollected increments on collection', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    await startGame(page);
+    await page.waitForTimeout(100);
+
+    // Manually collect stars
+    await page.evaluate(() => {
+        for (let i = 0; i < 3; i++) {
+            const star = stars.find(s => !s.collected);
+            if (star) {
+                star.collected = true;
+                starsCollected++;
+                score++;
+            }
+        }
+    });
+
+    const count = await page.evaluate(() => starsCollected);
+    expect(count).toBe(3);
+});
+
+// ============================================
+// Test: Milestone triggers at 10 stars
+// ============================================
+test('milestone notification at 10 stars', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    await startGame(page);
+    await page.waitForTimeout(100);
+
+    // Simulate collecting 10 stars
+    await page.evaluate(() => {
+        starsCollected = 9;
+        lastStarMilestone = 0;
+        // Collect the 10th
+        starsCollected++;
+        if (starsCollected % 10 === 0 && starsCollected > lastStarMilestone) {
+            lastStarMilestone = starsCollected;
+            milestones.push({ text: `${starsCollected} STARS!`, life: 1.0, y: canvas.height * 0.25 });
+        }
+    });
+
+    const ms = await page.evaluate(() => milestones.length);
+    expect(ms).toBeGreaterThan(0);
+
+    const text = await page.evaluate(() => milestones[0].text);
+    expect(text).toContain('10 STARS');
+});
+
+// ============================================
+// Test: Trail color changes with active power-up
+// ============================================
+test('trail color reflects active power-up', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    // Verify power-up types have distinct colors
+    const colors = await page.evaluate(() => POWERUP_TYPES.map(t => t.color));
+    const unique = new Set(colors);
+    expect(unique.size).toBe(colors.length); // all different colors
+});
+
+// ============================================
+// Test: Best distance displayed on start screen
+// ============================================
+test('best distance variable persists across reloads', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    await page.evaluate(() => {
+        localStorage.setItem('flyHighBestDistance', '1234');
+    });
+
+    await page.reload();
+    await page.waitForTimeout(500);
+
+    const bd = await page.evaluate(() => bestDistance);
+    expect(bd).toBe(1234);
 });

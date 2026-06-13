@@ -3,7 +3,7 @@
 // A side-scrolling browser game where you fly and collect stars
 // ============================================
 
-const GAME_VERSION = '0.8.0';
+const GAME_VERSION = '0.9.0';
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -255,6 +255,16 @@ const MAGNET_RANGE = 150;
 // Pause
 var paused = false;
 
+// Best distance
+const BEST_DISTANCE_KEY = 'flyHighBestDistance';
+var bestDistance = parseFloat(localStorage.getItem(BEST_DISTANCE_KEY) || '0');
+
+// Milestone notifications
+var milestones = []; // floating notifications
+var lastStarMilestone = 0; // last star-count milestone reached
+var starsCollected = 0; // total stars collected this run
+var distanceRecord = false; // whether current run beat best distance
+
 // --- Player ---
 var player = {
     x: 0,
@@ -418,6 +428,10 @@ function startGame() {
     powerups = [];
     activePowerup = null;
     paused = false;
+    milestones = [];
+    lastStarMilestone = 0;
+    starsCollected = 0;
+    distanceRecord = false;
     playStartSound();
 
     // Spawn initial stars ahead
@@ -443,16 +457,24 @@ function die() {
         highScore = score;
         localStorage.setItem('flyHighScore', String(highScore));
     }
+    const isNewBestDist = distance > bestDistance;
+    if (isNewBestDist) {
+        bestDistance = distance;
+        localStorage.setItem(BEST_DISTANCE_KEY, String(bestDistance));
+    }
     saveToLeaderboard(score);
     emitParticles(player.x, player.y, '#ff4444', 30);
     playDeathSound();
     shakeIntensity = 12;
     shakeDuration = 20;
     const distStr = Math.floor(distance).toLocaleString();
+    const bestDistStr = Math.floor(bestDistance).toLocaleString();
+    const newRecordTag = isNewBestDist ? ' NEW RECORD!' : '';
     showMessage(
         `Game Over!<br>` +
         `<span class="sub">Score: ${score} | Best: ${highScore}<br>` +
-        `Distance: ${distStr}m<br>` +
+        `Distance: ${distStr}m | Best: ${bestDistStr}m${newRecordTag}<br>` +
+        `Stars: ${starsCollected}<br>` +
         `Press Space or Tap to retry</span>`
     );
 }
@@ -490,6 +512,16 @@ function update() {
     var effectiveSpeed = (activePowerup && activePowerup.type === 'slow')
         ? scrollSpeed * 0.5 : scrollSpeed;
     distance += effectiveSpeed * 0.1;
+
+    // Distance record notification (only once per run)
+    if (!distanceRecord && bestDistance > 0 && distance > bestDistance) {
+        distanceRecord = true;
+        milestones.push({
+            text: 'NEW DISTANCE RECORD!',
+            life: 1.5,
+            y: canvas.height * 0.2
+        });
+    }
 
     // --- Vertical movement ---
     const movingUp = keys['Space'] || keys['ArrowUp'] || keys['KeyW'] || keys['Mouse'];
@@ -596,6 +628,16 @@ function update() {
             const particleColor = star.color === 'rainbow' ? '#ff44ff' : (star.color || '#ffd700');
             emitParticles(star.x, star.y, particleColor, 12);
             playCollectSound();
+            starsCollected++;
+            // Star milestone every 10 stars
+            if (starsCollected > 0 && starsCollected % 10 === 0 && starsCollected > lastStarMilestone) {
+                lastStarMilestone = starsCollected;
+                milestones.push({
+                    text: `${starsCollected} STARS!`,
+                    life: 1.0,
+                    y: canvas.height * 0.25
+                });
+            }
             // Combo popup
             if (comboMultiplier > 1) {
                 comboPopups.push({
@@ -775,6 +817,15 @@ function update() {
         }
     }
 
+    // Update milestones
+    for (let i = milestones.length - 1; i >= 0; i--) {
+        milestones[i].life -= 0.01;
+        milestones[i].y -= 0.3;
+        if (milestones[i].life <= 0) {
+            milestones.splice(i, 1);
+        }
+    }
+
     // Screen shake decay
     if (shakeDuration > 0) {
         shakeDuration--;
@@ -854,7 +905,15 @@ function drawPlayer() {
         const t = player.trail[i];
         const alpha = i / player.trail.length * 0.3;
         ctx.globalAlpha = alpha;
-        ctx.fillStyle = isThrusting ? '#ff8800' : '#4488ff';
+        // Trail color changes with active power-up
+        let trailColor;
+        if (activePowerup) {
+            const puInfo = POWERUP_TYPES.find(t => t.type === activePowerup.type);
+            trailColor = puInfo ? puInfo.color : '#4488ff';
+        } else {
+            trailColor = isThrusting ? '#ff8800' : '#4488ff';
+        }
+        ctx.fillStyle = trailColor;
         ctx.beginPath();
         ctx.arc(t.x, t.y, PLAYER_SIZE * 0.4 * (i / player.trail.length), 0, Math.PI * 2);
         ctx.fill();
@@ -1096,6 +1155,12 @@ function drawStartScreen() {
         ctx.fillStyle = '#ffd700';
         ctx.font = '18px Segoe UI, sans-serif';
         ctx.fillText(`Best: ${highScore}`, canvas.width / 2, canvas.height / 2 + 90);
+
+        if (bestDistance > 0) {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.font = '15px Segoe UI, sans-serif';
+            ctx.fillText(`Farthest: ${Math.floor(bestDistance).toLocaleString()}m`, canvas.width / 2, canvas.height / 2 + 112);
+        }
     }
 
     // Leaderboard
@@ -1126,6 +1191,21 @@ function drawStartScreen() {
 }
 
 // --- Main Loop ---
+
+function drawMilestones() {
+    for (const m of milestones) {
+        ctx.globalAlpha = Math.min(m.life, 1);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 28px Segoe UI, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.shadowColor = '#ffd700';
+        ctx.shadowBlur = 15;
+        ctx.fillText(m.text, canvas.width / 2, m.y);
+        ctx.shadowBlur = 0;
+    }
+    ctx.globalAlpha = 1;
+    ctx.textAlign = 'left';
+}
 
 function drawComboPopups() {
     for (const p of comboPopups) {
@@ -1193,6 +1273,7 @@ function gameLoop() {
         drawHUD();
         drawComboHUD();
         drawComboPopups();
+        drawMilestones();
     }
 
     drawParticles();
