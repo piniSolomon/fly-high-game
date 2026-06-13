@@ -2,31 +2,31 @@
 
 ## Current Goal
 
-The game is feature-complete. Continue iterating on polish and new ideas.
+The game is feature-complete and polished. Continue iterating with new ideas.
 
 ## Tasks
 
-### Completed (v0.1.0 — v2.2.0)
-- [x] All v2.1.0 features (see git history)
-- [x] Dynamic music (4 chord progressions matched to themes, smooth transitions)
+### Completed (v0.1.0 — v2.3.0)
+- [x] All v2.2.0 features (see git history)
+- [x] Player skins (6 skins, unlocked via achievements, [ ] to cycle, persists)
 
 ### Next Up — Future Ideas
 - [ ] Refactor game.js into modules (audio, rendering, state, input)
 - [ ] Performance optimization (object pooling for particles)
-- [ ] Add player skins (unlock with achievements)
 - [ ] Add a replay system (watch last death)
 - [ ] Add seasonal events or daily challenges
 - [ ] Add endless mode variants (speed-only, stars-only)
 - [ ] Add multiplayer (split screen or network)
 - [ ] Add procedural terrain (mountains, floating islands)
+- [ ] Add a skin preview on start screen
 
 ## Status
 
-v2.2.0 — 86 E2E tests. Dynamic music. 22 versions, 38 commits, ~2800 lines of game code.
+v2.3.0 — 89 E2E tests. Player skins. 23 versions, 40 commits, ~2900 lines of game code.
 
 ## Learnings
 
-- linearRampToValueAtTime creates smooth frequency transitions without audio pops
-- Matching chord progressions to visual themes creates cohesive audiovisual experience
-- Checking chord change every 60 frames (~1s) is responsive enough without CPU waste
-- Four distinct chords (open fifth, major, dark fifth, warm) create varied emotional tones
+- Achievement-gated unlocks add motivation to chase specific goals
+- Rainbow skin with hue cycling needs both body + stripe to animate cohesively
+- Fin color derived from body via lerpColor darkening works for all skin colors
+- HSL-based rainbow needs special handling since lerpColor expects hex
