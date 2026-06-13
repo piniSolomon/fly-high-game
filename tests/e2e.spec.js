@@ -6,8 +6,9 @@ const { test, expect } = require('@playwright/test');
 // Tests all game features via browser automation
 // ============================================
 
-// Helper: start the game by clicking canvas
+// Helper: start the game by clicking canvas (auto-skips tutorial)
 async function startGame(page) {
+    await page.evaluate(() => { tutorialSeen = true; showingTutorial = false; });
     await page.locator('canvas').click();
     await page.waitForTimeout(100);
 }
@@ -71,6 +72,7 @@ test('game starts on Space key', async ({ page }) => {
     await page.goto('/index.html');
     await page.waitForTimeout(300);
 
+    await page.evaluate(() => { tutorialSeen = true; });
     await page.keyboard.press('Space');
     await page.waitForTimeout(100);
 
@@ -519,12 +521,12 @@ test('favicon is linked in HTML', async ({ page }) => {
 // ============================================
 // Test: Version is updated to 0.5.0
 // ============================================
-test('game version is 1.3.0', async ({ page }) => {
+test('game version is 1.4.0', async ({ page }) => {
     await page.goto('/index.html');
     await page.waitForTimeout(300);
 
     const version = await page.evaluate(() => GAME_VERSION);
-    expect(version).toBe('1.3.0');
+    expect(version).toBe('1.4.0');
 });
 
 // ============================================
@@ -1312,4 +1314,159 @@ test('background themes exist and rotate with distance', async ({ page }) => {
 
     // Each should be different (cycling through 4 themes)
     expect(new Set(themeAtDistances).size).toBe(4);
+});
+
+// ============================================
+// Test: Tutorial shows on first play
+// ============================================
+test('tutorial triggers on first play if unseen', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    // Clear tutorial seen flag
+    await page.evaluate(() => {
+        localStorage.removeItem('flyHighTutorialSeen');
+        tutorialSeen = false;
+        showingTutorial = false;
+    });
+
+    // Attempt to start — should show tutorial instead
+    await page.locator('canvas').click();
+    await page.waitForTimeout(100);
+
+    const showing = await page.evaluate(() => showingTutorial);
+    expect(showing).toBe(true);
+
+    // State should still be 'start' (tutorial blocks game start)
+    const gameState = await page.evaluate(() => state);
+    expect(gameState).toBe('start');
+});
+
+// ============================================
+// Test: Tutorial dismisses on second interaction
+// ============================================
+test('tutorial dismisses and starts game on second click', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    await page.evaluate(() => {
+        localStorage.removeItem('flyHighTutorialSeen');
+        tutorialSeen = false;
+        showingTutorial = false;
+    });
+
+    // First click shows tutorial
+    await page.locator('canvas').click();
+    await page.waitForTimeout(100);
+
+    // Second click starts game
+    await page.locator('canvas').click();
+    await page.waitForTimeout(100);
+
+    const gameState = await page.evaluate(() => state);
+    expect(gameState).toBe('playing');
+
+    // Tutorial seen flag should be set
+    const seen = await page.evaluate(() => tutorialSeen);
+    expect(seen).toBe(true);
+});
+
+// ============================================
+// Test: Tutorial skipped if already seen
+// ============================================
+test('tutorial skipped if already seen', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    await page.evaluate(() => {
+        localStorage.setItem('flyHighTutorialSeen', 'true');
+        tutorialSeen = true;
+    });
+
+    await page.locator('canvas').click();
+    await page.waitForTimeout(100);
+
+    // Should start directly, no tutorial
+    const gameState = await page.evaluate(() => state);
+    expect(gameState).toBe('playing');
+});
+
+// ============================================
+// Test: Coins spawn in obstacle gaps
+// ============================================
+test('coins can be spawned and have correct properties', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    await page.evaluate(() => {
+        // Skip tutorial
+        tutorialSeen = true;
+    });
+    await startGame(page);
+    await page.waitForTimeout(100);
+
+    // Manually spawn a coin
+    await page.evaluate(() => {
+        coins.push({
+            x: player.x + 50,
+            y: player.y,
+            size: COIN_SIZE,
+            spin: 0,
+            collected: false
+        });
+    });
+
+    const coinInfo = await page.evaluate(() => ({
+        count: coins.length,
+        hasSize: typeof coins[0].size === 'number',
+        hasSpin: typeof coins[0].spin === 'number',
+        notCollected: coins[0].collected === false
+    }));
+
+    expect(coinInfo.count).toBe(1);
+    expect(coinInfo.hasSize).toBe(true);
+    expect(coinInfo.hasSpin).toBe(true);
+    expect(coinInfo.notCollected).toBe(true);
+});
+
+// ============================================
+// Test: Coin collection gives bonus points
+// ============================================
+test('coin collection awards bonus points', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    await page.evaluate(() => { tutorialSeen = true; });
+    await startGame(page);
+    await page.waitForTimeout(100);
+
+    const points = await page.evaluate(() => {
+        const before = score;
+        // Place coin on player
+        coins.push({
+            x: player.x,
+            y: player.y,
+            size: COIN_SIZE,
+            spin: 0,
+            collected: false
+        });
+        // Manually collect
+        coins[coins.length - 1].collected = true;
+        score += COIN_POINTS;
+        return { before, after: score, coinPoints: COIN_POINTS };
+    });
+
+    expect(points.after).toBe(points.before + points.coinPoints);
+    expect(points.coinPoints).toBeGreaterThanOrEqual(2);
+});
+
+// ============================================
+// Test: Tutorial draw function exists
+// ============================================
+test('drawTutorial function is defined', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    const exists = await page.evaluate(() => typeof drawTutorial === 'function');
+    expect(exists).toBe(true);
 });

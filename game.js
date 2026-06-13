@@ -3,7 +3,7 @@
 // A side-scrolling browser game where you fly and collect stars
 // ============================================
 
-const GAME_VERSION = '1.3.0';
+const GAME_VERSION = '1.4.0';
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -381,6 +381,16 @@ const MAGNET_RANGE = 150;
 // Pause
 var paused = false;
 
+// Tutorial (shown on first ever play)
+const TUTORIAL_SEEN_KEY = 'flyHighTutorialSeen';
+var tutorialSeen = localStorage.getItem(TUTORIAL_SEEN_KEY) === 'true';
+var showingTutorial = false;
+
+// Coins (bonus collectibles placed in obstacle gaps)
+var coins = [];
+const COIN_SIZE = 10;
+const COIN_POINTS = 3;
+
 // Best distance
 const BEST_DISTANCE_KEY = 'flyHighBestDistance';
 var bestDistance = parseFloat(localStorage.getItem(BEST_DISTANCE_KEY) || '0');
@@ -582,6 +592,17 @@ function emitParticles(x, y, color, count) {
 // --- Game Functions ---
 
 function startGame() {
+    // Show tutorial on first ever play
+    if (!tutorialSeen && !showingTutorial) {
+        showingTutorial = true;
+        return; // don't actually start — drawTutorial will handle display
+    }
+    if (showingTutorial) {
+        showingTutorial = false;
+        tutorialSeen = true;
+        localStorage.setItem(TUTORIAL_SEEN_KEY, 'true');
+    }
+
     state = 'playing';
     score = 0;
     distance = 0;
@@ -611,6 +632,7 @@ function startGame() {
     sessionCollectedRainbow = false;
     sessionMaxCombo = 0;
     achievementPopup = null;
+    coins = [];
     playStartSound();
     if (!musicPlaying) startMusic();
 
@@ -873,6 +895,17 @@ function update() {
     nextObstacleIn--;
     if (nextObstacleIn <= 0) {
         spawnObstacle();
+        // Spawn coin in the obstacle gap (50% chance)
+        const lastObs = obstacles[obstacles.length - 1];
+        if (lastObs && Math.random() < 0.5) {
+            coins.push({
+                x: lastObs.x + lastObs.width / 2,
+                y: lastObs.gapY + lastObs.gapHeight / 2,
+                size: COIN_SIZE,
+                spin: Math.random() * Math.PI * 2,
+                collected: false
+            });
+        }
         nextObstacleIn = OBSTACLE_SPAWN_INTERVAL_MIN +
             Math.random() * (OBSTACLE_SPAWN_INTERVAL_MAX - OBSTACLE_SPAWN_INTERVAL_MIN);
         nextObstacleIn = Math.max(60, nextObstacleIn * (BASE_SCROLL_SPEED / effectiveSpeed));
@@ -899,6 +932,39 @@ function update() {
                 die();
                 return;
             }
+        }
+    }
+
+    // --- Coins ---
+    for (let i = coins.length - 1; i >= 0; i--) {
+        coins[i].x -= effectiveSpeed;
+        coins[i].spin += 0.05;
+
+        // Remove off-screen
+        if (coins[i].x < -20) {
+            coins.splice(i, 1);
+            continue;
+        }
+
+        if (coins[i].collected) continue;
+
+        // Collection check
+        const cdx = player.x - coins[i].x;
+        const cdy = player.y - coins[i].y;
+        const cdist = Math.sqrt(cdx * cdx + cdy * cdy);
+        if (cdist < PLAYER_SIZE + coins[i].size) {
+            coins[i].collected = true;
+            score += COIN_POINTS;
+            scoreEl.textContent = `Score: ${score}`;
+            emitParticles(coins[i].x, coins[i].y, '#ffaa00', 8);
+            playCollectSound();
+            comboPopups.push({
+                x: coins[i].x,
+                y: coins[i].y - 15,
+                text: `+${COIN_POINTS}`,
+                life: 1.0,
+                vy: -1.5
+            });
         }
     }
 
@@ -1315,6 +1381,46 @@ function drawStars() {
     }
 }
 
+function drawCoins() {
+    for (const coin of coins) {
+        if (coin.collected) continue;
+
+        ctx.save();
+        ctx.translate(coin.x, coin.y);
+
+        // Spinning coin effect (scale X by cos for 3D look)
+        const scaleX = Math.abs(Math.cos(coin.spin));
+        ctx.scale(scaleX || 0.1, 1);
+
+        ctx.shadowColor = '#ffaa00';
+        ctx.shadowBlur = 12;
+
+        // Outer ring
+        ctx.fillStyle = '#ffaa00';
+        ctx.beginPath();
+        ctx.arc(0, 0, coin.size, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Inner circle
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#ffdd44';
+        ctx.beginPath();
+        ctx.arc(0, 0, coin.size * 0.65, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Dollar sign
+        ctx.fillStyle = '#cc8800';
+        ctx.font = `bold ${Math.floor(coin.size)}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('$', 0, 1);
+
+        ctx.restore();
+    }
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+}
+
 function drawPowerups() {
     for (const pu of powerups) {
         if (pu.collected) continue;
@@ -1495,6 +1601,82 @@ function drawScreenFlash() {
     ctx.globalAlpha = 1;
 }
 
+function drawTutorial() {
+    const cx = canvas.width / 2;
+    const cy = canvas.height / 2;
+
+    // Semi-transparent overlay
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.textAlign = 'center';
+
+    // Title
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 36px Segoe UI, sans-serif';
+    ctx.fillText('HOW TO PLAY', cx, cy - 130);
+
+    // Controls section
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '18px Segoe UI, sans-serif';
+    const lines = [
+        { icon: '⬆ ⬇ ⬅ ➡', text: 'Arrow Keys or WASD to move' },
+        { icon: '⎵', text: 'Space / Click / Tap to thrust up' },
+        { icon: 'M', text: 'Toggle background music' },
+        { icon: 'Esc', text: 'Pause the game' },
+    ];
+
+    let y = cy - 80;
+    for (const line of lines) {
+        ctx.fillStyle = '#ffd700';
+        ctx.font = 'bold 16px Segoe UI, monospace';
+        ctx.fillText(line.icon, cx - 100, y);
+        ctx.fillStyle = '#ccccee';
+        ctx.font = '15px Segoe UI, sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText(line.text, cx - 50, y);
+        ctx.textAlign = 'center';
+        y += 30;
+    }
+
+    // Game elements
+    y += 15;
+    ctx.fillStyle = '#8888aa';
+    ctx.font = 'bold 14px Segoe UI, sans-serif';
+    ctx.fillText('COLLECT', cx, y);
+    y += 25;
+
+    ctx.font = '14px Segoe UI, sans-serif';
+    ctx.fillStyle = '#ffd700';
+    ctx.fillText('★ Stars — points (gold, silver, ruby, rainbow)', cx, y);
+    y += 22;
+    ctx.fillStyle = '#ffaa00';
+    ctx.fillText('$ Coins — bonus points in obstacle gaps', cx, y);
+    y += 22;
+    ctx.fillStyle = '#44ddff';
+    ctx.fillText('⬡ Power-ups — shield, magnet, slow-mo', cx, y);
+
+    y += 35;
+    ctx.fillStyle = '#ff6666';
+    ctx.font = 'bold 14px Segoe UI, sans-serif';
+    ctx.fillText('AVOID', cx, y);
+    y += 22;
+    ctx.fillStyle = '#ccccee';
+    ctx.font = '14px Segoe UI, sans-serif';
+    ctx.fillText('Obstacles (pillars) and screen edges!', cx, y);
+
+    // Continue prompt
+    y += 50;
+    ctx.fillStyle = '#666688';
+    ctx.font = '16px Segoe UI, sans-serif';
+    const blink = Math.sin(frameCount * 0.05) > 0;
+    if (blink) {
+        ctx.fillText('Press any key or tap to start!', cx, y);
+    }
+
+    ctx.textAlign = 'left';
+}
+
 function drawStartScreen() {
     ctx.fillStyle = '#ffd700';
     ctx.font = 'bold 64px Segoe UI, sans-serif';
@@ -1671,12 +1853,17 @@ function gameLoop() {
     drawBackground();
 
     if (state === 'start') {
-        drawStartScreen();
+        if (showingTutorial) {
+            drawTutorial();
+        } else {
+            drawStartScreen();
+        }
     } else {
         drawObstacles();
         drawObstacleWarnings();
         drawStars();
         drawPowerups();
+        drawCoins();
         drawPlayer();
         drawActivePowerupHUD();
         drawHUD();
