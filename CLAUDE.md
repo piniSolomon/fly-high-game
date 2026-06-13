@@ -148,6 +148,18 @@ You maintain a `plan.md` file that describes:
 
 ---
 
+# Versioning
+
+The game uses **semantic versioning** (SemVer): `MAJOR.MINOR.PATCH`
+
+- **MAJOR** — Breaking changes or complete redesigns
+- **MINOR** — New features (new mechanic, new visual, new game mode)
+- **PATCH** — Bug fixes, tweaks, small polish
+
+The version is defined as `GAME_VERSION` at the top of `game.js` and displayed on the start screen. **Bump the version after every feature or fix before committing.** The version history is tracked via git tags and commits.
+
+---
+
 # Working with MD Files
 
 You are expected to help the human write better MD files. This means:
