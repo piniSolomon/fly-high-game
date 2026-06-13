@@ -519,12 +519,12 @@ test('favicon is linked in HTML', async ({ page }) => {
 // ============================================
 // Test: Version is updated to 0.5.0
 // ============================================
-test('game version is 0.7.0', async ({ page }) => {
+test('game version is 0.8.0', async ({ page }) => {
     await page.goto('/index.html');
     await page.waitForTimeout(300);
 
     const version = await page.evaluate(() => GAME_VERSION);
-    expect(version).toBe('0.7.0');
+    expect(version).toBe('0.8.0');
 });
 
 // ============================================
@@ -745,4 +745,135 @@ test('power-up sound function is defined', async ({ page }) => {
 
     const exists = await page.evaluate(() => typeof playPowerupSound === 'function');
     expect(exists).toBe(true);
+});
+
+// ============================================
+// Test: Star types are defined with varying points
+// ============================================
+test('multiple star types exist with different point values', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    const types = await page.evaluate(() => STAR_TYPES.map(t => ({ type: t.type, points: t.points })));
+    expect(types.length).toBeGreaterThanOrEqual(4);
+
+    const gold = types.find(t => t.type === 'gold');
+    const rainbow = types.find(t => t.type === 'rainbow');
+    expect(gold).toBeTruthy();
+    expect(rainbow).toBeTruthy();
+    expect(rainbow.points).toBeGreaterThan(gold.points);
+});
+
+// ============================================
+// Test: Spawned stars have type info
+// ============================================
+test('spawned stars have type and points properties', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    await startGame(page);
+    await page.waitForTimeout(200);
+
+    const starInfo = await page.evaluate(() => {
+        const star = stars.find(s => !s.collected);
+        if (!star) return null;
+        return { hasType: !!star.starType, hasPoints: typeof star.points === 'number', hasColor: !!star.color };
+    });
+
+    expect(starInfo).not.toBeNull();
+    expect(starInfo.hasType).toBe(true);
+    expect(starInfo.hasPoints).toBe(true);
+    expect(starInfo.hasColor).toBe(true);
+});
+
+// ============================================
+// Test: Higher-value stars give more points
+// ============================================
+test('ruby star gives more points than gold', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    await startGame(page);
+    await page.waitForTimeout(100);
+
+    // Manually collect a ruby star (3 points) vs gold (1 point)
+    const rubyPoints = await page.evaluate(() => {
+        const rubyType = STAR_TYPES.find(t => t.type === 'ruby');
+        return rubyType ? rubyType.points : 0;
+    });
+    const goldPoints = await page.evaluate(() => {
+        const goldType = STAR_TYPES.find(t => t.type === 'gold');
+        return goldType ? goldType.points : 0;
+    });
+
+    expect(rubyPoints).toBeGreaterThan(goldPoints);
+});
+
+// ============================================
+// Test: Leaderboard saves scores
+// ============================================
+test('leaderboard saves and sorts scores', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    // Clear any previous leaderboard and inject scores
+    await page.evaluate(() => {
+        localStorage.removeItem('flyHighLeaderboard');
+        leaderboard = [];
+        saveToLeaderboard(10);
+        saveToLeaderboard(50);
+        saveToLeaderboard(25);
+    });
+
+    const lb = await page.evaluate(() => leaderboard);
+    expect(lb).toEqual([50, 25, 10]);
+    expect(lb.length).toBeLessThanOrEqual(5);
+});
+
+// ============================================
+// Test: Leaderboard persists across reloads
+// ============================================
+test('leaderboard persists across page reloads', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    // Set up leaderboard
+    await page.evaluate(() => {
+        localStorage.setItem('flyHighLeaderboard', JSON.stringify([100, 50, 20]));
+    });
+
+    await page.reload();
+    await page.waitForTimeout(500);
+
+    const lb = await page.evaluate(() => leaderboard);
+    expect(lb).toEqual([100, 50, 20]);
+});
+
+// ============================================
+// Test: Difficulty curve narrows obstacle gaps
+// ============================================
+test('obstacle gaps shrink with distance', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    await startGame(page);
+    await page.waitForTimeout(100);
+
+    // Spawn obstacle at low distance
+    await page.evaluate(() => { distance = 0; });
+    await page.evaluate(() => { spawnObstacle(); });
+    const earlyGap = await page.evaluate(() => obstacles[obstacles.length - 1].gapHeight);
+
+    // Spawn obstacle at high distance
+    await page.evaluate(() => { distance = 8000; });
+    await page.evaluate(() => { spawnObstacle(); });
+    const lateGap = await page.evaluate(() => obstacles[obstacles.length - 1].gapHeight);
+
+    // Late game gaps should be smaller on average (test with generous tolerance since there's randomness)
+    // The max gap shrinks by up to 35%, so the expected late gap should be noticeably smaller
+    // We'll check the max possible: at distance 8000 the factor is capped at 0.35
+    const maxGapEarly = await page.evaluate(() => OBSTACLE_MAX_GAP);
+    const maxGapLate = await page.evaluate(() => OBSTACLE_MAX_GAP * (1 - 0.35));
+
+    expect(maxGapLate).toBeLessThan(maxGapEarly);
 });

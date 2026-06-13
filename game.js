@@ -3,7 +3,7 @@
 // A side-scrolling browser game where you fly and collect stars
 // ============================================
 
-const GAME_VERSION = '0.7.0';
+const GAME_VERSION = '0.8.0';
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -188,6 +188,35 @@ const OBSTACLE_SPAWN_INTERVAL_MAX = 160;
 const STAR_SPAWN_INTERVAL_MIN = 40;
 const STAR_SPAWN_INTERVAL_MAX = 80;
 
+// Star types — different values and visuals
+const STAR_TYPES = [
+    { type: 'gold',    color: '#ffd700', points: 1, weight: 60, size: 14 },
+    { type: 'silver',  color: '#c0c0c0', points: 2, weight: 25, size: 12 },
+    { type: 'ruby',    color: '#ff4466', points: 3, weight: 10, size: 13 },
+    { type: 'rainbow', color: 'rainbow', points: 5, weight: 5,  size: 16 },
+];
+
+function pickStarType() {
+    const totalWeight = STAR_TYPES.reduce((sum, t) => sum + t.weight, 0);
+    let roll = Math.random() * totalWeight;
+    for (const st of STAR_TYPES) {
+        roll -= st.weight;
+        if (roll <= 0) return st;
+    }
+    return STAR_TYPES[0];
+}
+
+// Leaderboard
+const LEADERBOARD_KEY = 'flyHighLeaderboard';
+var leaderboard = JSON.parse(localStorage.getItem(LEADERBOARD_KEY) || '[]');
+
+function saveToLeaderboard(score) {
+    leaderboard.push(score);
+    leaderboard.sort((a, b) => b - a);
+    leaderboard = leaderboard.slice(0, 5); // keep top 5
+    localStorage.setItem(LEADERBOARD_KEY, JSON.stringify(leaderboard));
+}
+
 // --- Persistent High Score ---
 var highScore = parseInt(localStorage.getItem('flyHighScore') || '0', 10);
 
@@ -309,12 +338,16 @@ var stars = [];
 
 function spawnScrollingStar() {
     const margin = 50;
+    const st = pickStarType();
     stars.push({
         x: canvas.width + 30,
         y: margin + Math.random() * (canvas.height - margin * 2),
-        size: STAR_SIZE,
+        size: st.size,
         pulse: Math.random() * Math.PI * 2,
-        collected: false
+        collected: false,
+        starType: st.type,
+        color: st.color,
+        points: st.points
     });
 }
 
@@ -322,7 +355,12 @@ function spawnScrollingStar() {
 var obstacles = [];
 
 function spawnObstacle() {
-    const gap = OBSTACLE_MIN_GAP + Math.random() * (OBSTACLE_MAX_GAP - OBSTACLE_MIN_GAP);
+    // Difficulty curve: gap shrinks as distance increases
+    const difficultyFactor = Math.min(distance / 5000, 0.35); // max 35% reduction
+    const adjustedMinGap = OBSTACLE_MIN_GAP * (1 - difficultyFactor * 0.3);
+    const adjustedMaxGap = OBSTACLE_MAX_GAP * (1 - difficultyFactor);
+    const gap = adjustedMinGap + Math.random() * (adjustedMaxGap - adjustedMinGap);
+
     const minY = 60;
     const maxY = canvas.height - gap - 60;
     const gapY = minY + Math.random() * (maxY - minY);
@@ -385,12 +423,16 @@ function startGame() {
     // Spawn initial stars ahead
     for (let i = 0; i < 5; i++) {
         const margin = 50;
+        const st = pickStarType();
         stars.push({
             x: canvas.width * 0.3 + Math.random() * canvas.width * 0.6,
             y: margin + Math.random() * (canvas.height - margin * 2),
-            size: STAR_SIZE,
+            size: st.size,
             pulse: Math.random() * Math.PI * 2,
-            collected: false
+            collected: false,
+            starType: st.type,
+            color: st.color,
+            points: st.points
         });
     }
 }
@@ -401,6 +443,7 @@ function die() {
         highScore = score;
         localStorage.setItem('flyHighScore', String(highScore));
     }
+    saveToLeaderboard(score);
     emitParticles(player.x, player.y, '#ff4444', 30);
     playDeathSound();
     shakeIntensity = 12;
@@ -546,10 +589,12 @@ function update() {
             for (const threshold of COMBO_THRESHOLDS) {
                 if (combo >= threshold) comboMultiplier++;
             }
-            const points = comboMultiplier;
+            const basePoints = star.points || 1;
+            const points = basePoints * comboMultiplier;
             score += points;
             scoreEl.textContent = `Score: ${score}`;
-            emitParticles(star.x, star.y, '#ffd700', 12);
+            const particleColor = star.color === 'rainbow' ? '#ff44ff' : (star.color || '#ffd700');
+            emitParticles(star.x, star.y, particleColor, 12);
             playCollectSound();
             // Combo popup
             if (comboMultiplier > 1) {
@@ -869,7 +914,7 @@ function drawPlayer() {
     ctx.globalAlpha = 1;
 }
 
-function drawStar(x, y, size, pulse) {
+function drawStar(x, y, size, pulse, color) {
     const pulseFactor = 1 + Math.sin(frameCount * 0.05 + pulse) * 0.15;
     const s = size * pulseFactor;
     const spikes = 5;
@@ -878,10 +923,19 @@ function drawStar(x, y, size, pulse) {
     ctx.translate(x, y);
     ctx.rotate(frameCount * 0.02 + pulse);
 
-    ctx.shadowColor = '#ffd700';
+    // Determine color
+    let fillColor;
+    if (color === 'rainbow') {
+        const hue = (frameCount * 3 + pulse * 50) % 360;
+        fillColor = `hsl(${hue}, 100%, 65%)`;
+    } else {
+        fillColor = color || '#ffd700';
+    }
+
+    ctx.shadowColor = fillColor;
     ctx.shadowBlur = 20;
 
-    ctx.fillStyle = '#ffd700';
+    ctx.fillStyle = fillColor;
     ctx.beginPath();
     for (let i = 0; i < spikes * 2; i++) {
         const radius = i % 2 === 0 ? s : s * 0.4;
@@ -901,7 +955,7 @@ function drawStar(x, y, size, pulse) {
 function drawStars() {
     for (const star of stars) {
         if (!star.collected) {
-            drawStar(star.x, star.y, star.size, star.pulse);
+            drawStar(star.x, star.y, star.size, star.pulse, star.color);
         }
     }
 }
@@ -1042,6 +1096,25 @@ function drawStartScreen() {
         ctx.fillStyle = '#ffd700';
         ctx.font = '18px Segoe UI, sans-serif';
         ctx.fillText(`Best: ${highScore}`, canvas.width / 2, canvas.height / 2 + 90);
+    }
+
+    // Leaderboard
+    if (leaderboard.length > 0) {
+        const lbX = canvas.width / 2;
+        let lbY = canvas.height / 2 + 125;
+
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+        ctx.font = 'bold 14px Segoe UI, sans-serif';
+        ctx.fillText('TOP SCORES', lbX, lbY);
+        lbY += 5;
+
+        ctx.font = '13px Segoe UI, monospace';
+        for (let i = 0; i < Math.min(leaderboard.length, 5); i++) {
+            lbY += 20;
+            const medal = i === 0 ? '  ' : i === 1 ? '  ' : i === 2 ? '  ' : '    ';
+            ctx.fillStyle = i === 0 ? '#ffd700' : i === 1 ? '#c0c0c0' : i === 2 ? '#cd7f32' : 'rgba(255,255,255,0.35)';
+            ctx.fillText(`${medal}${i + 1}. ${leaderboard[i].toLocaleString()}`, lbX, lbY);
+        }
     }
 
     // Version
