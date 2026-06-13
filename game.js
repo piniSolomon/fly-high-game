@@ -3,7 +3,7 @@
 // A side-scrolling browser game where you fly and collect stars
 // ============================================
 
-const GAME_VERSION = '1.0.0';
+const GAME_VERSION = '1.1.0';
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -415,6 +415,37 @@ window.addEventListener('touchend', (e) => {
     keys['Mouse'] = false;
 }, { passive: false });
 
+// --- Mobile touch button controls ---
+function setupMobileButton(id, keyCode) {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    btn.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        keys[keyCode] = true;
+        btn.classList.add('pressed');
+        if (keyCode === 'Space' && (state === 'start' || state === 'dead')) {
+            initAudio();
+            startGame();
+        }
+    }, { passive: false });
+    btn.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        keys[keyCode] = false;
+        btn.classList.remove('pressed');
+    }, { passive: false });
+    btn.addEventListener('touchcancel', (e) => {
+        keys[keyCode] = false;
+        btn.classList.remove('pressed');
+    });
+}
+
+setupMobileButton('btn-thrust', 'Space');
+setupMobileButton('btn-down', 'ArrowDown');
+setupMobileButton('btn-left', 'ArrowLeft');
+setupMobileButton('btn-right', 'ArrowRight');
+
 // --- Stars (scrolling collectibles) ---
 var stars = [];
 
@@ -447,13 +478,26 @@ function spawnObstacle() {
     const maxY = canvas.height - gap - 60;
     const gapY = minY + Math.random() * (maxY - minY);
 
+    // Moving obstacles appear after 800m, chance increases with distance
+    const movingChance = Math.min((distance - 800) / 3000, 0.45);
+    const isMoving = distance > 800 && Math.random() < movingChance;
+    const moveSpeed = isMoving ? (0.5 + Math.random() * 1.0) * (Math.random() < 0.5 ? 1 : -1) : 0;
+    const moveRange = isMoving ? 30 + Math.random() * 40 : 0;
+
     obstacles.push({
         x: canvas.width + OBSTACLE_WIDTH,
         gapY: gapY,
+        gapYBase: gapY, // original position for oscillation center
         gapHeight: gap,
         width: OBSTACLE_WIDTH,
         passed: false,
-        color: `hsl(${200 + Math.random() * 40}, 30%, ${15 + Math.random() * 10}%)`
+        moving: isMoving,
+        moveSpeed: moveSpeed,
+        moveRange: moveRange,
+        movePhase: Math.random() * Math.PI * 2,
+        color: isMoving
+            ? `hsl(${340 + Math.random() * 30}, 40%, ${18 + Math.random() * 8}%)`
+            : `hsl(${200 + Math.random() * 40}, 30%, ${15 + Math.random() * 10}%)`
     });
 }
 
@@ -737,6 +781,17 @@ function update() {
     for (let i = obstacles.length - 1; i >= 0; i--) {
         obstacles[i].x -= effectiveSpeed;
 
+        // Moving obstacles oscillate vertically
+        if (obstacles[i].moving) {
+            obstacles[i].movePhase += 0.03;
+            const offset = Math.sin(obstacles[i].movePhase) * obstacles[i].moveRange;
+            obstacles[i].gapY = obstacles[i].gapYBase + offset;
+            // Clamp so gap stays on screen
+            const minGapY = 40;
+            const maxGapY = canvas.height - obstacles[i].gapHeight - 40;
+            obstacles[i].gapY = Math.max(minGapY, Math.min(maxGapY, obstacles[i].gapY));
+        }
+
         // Award point for passing obstacle
         if (!obstacles[i].passed && obstacles[i].x + obstacles[i].width < player.x) {
             obstacles[i].passed = true;
@@ -974,6 +1029,20 @@ function drawObstacles() {
         glowGrad2.addColorStop(1, 'transparent');
         ctx.fillStyle = glowGrad2;
         ctx.fillRect(obs.x - 4, botY, obs.width + 8, 30);
+
+        // Moving obstacle indicator — pulsing arrows
+        if (obs.moving) {
+            const pulse = Math.sin(frameCount * 0.08) * 0.3 + 0.5;
+            ctx.globalAlpha = pulse;
+            ctx.fillStyle = '#ff6688';
+            ctx.font = 'bold 14px sans-serif';
+            ctx.textAlign = 'center';
+            // Arrow showing movement direction
+            const arrowY = obs.gapY + obs.gapHeight / 2;
+            ctx.fillText('↕', obs.x + obs.width / 2, arrowY);
+            ctx.globalAlpha = 1;
+            ctx.textAlign = 'left';
+        }
     }
 }
 

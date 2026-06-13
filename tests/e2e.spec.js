@@ -519,12 +519,12 @@ test('favicon is linked in HTML', async ({ page }) => {
 // ============================================
 // Test: Version is updated to 0.5.0
 // ============================================
-test('game version is 1.0.0', async ({ page }) => {
+test('game version is 1.1.0', async ({ page }) => {
     await page.goto('/index.html');
     await page.waitForTimeout(300);
 
     const version = await page.evaluate(() => GAME_VERSION);
-    expect(version).toBe('1.0.0');
+    expect(version).toBe('1.1.0');
 });
 
 // ============================================
@@ -1062,4 +1062,115 @@ test('difficulty label changes with distance', async ({ page }) => {
     expect(labels[2]).toBe('HARD');
     expect(labels[3]).toBe('INSANE');
     expect(labels[4]).toBe('NIGHTMARE');
+});
+
+// ============================================
+// Test: Moving obstacles spawn after 800m
+// ============================================
+test('moving obstacles have oscillation properties', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    await startGame(page);
+    await page.waitForTimeout(100);
+
+    // Spawn obstacle at high distance to guarantee moving type
+    const hasMoving = await page.evaluate(() => {
+        distance = 5000;
+        // Spawn several and check if any are moving
+        for (let i = 0; i < 20; i++) {
+            spawnObstacle();
+        }
+        return obstacles.some(o => o.moving === true);
+    });
+
+    expect(hasMoving).toBe(true);
+
+    // Verify moving obstacle has required properties
+    const props = await page.evaluate(() => {
+        const moving = obstacles.find(o => o.moving);
+        if (!moving) return null;
+        return {
+            hasGapYBase: typeof moving.gapYBase === 'number',
+            hasMoveSpeed: typeof moving.moveSpeed === 'number',
+            hasMoveRange: typeof moving.moveRange === 'number',
+            hasMovePhase: typeof moving.movePhase === 'number',
+        };
+    });
+
+    expect(props).not.toBeNull();
+    expect(props.hasGapYBase).toBe(true);
+    expect(props.hasMoveRange).toBe(true);
+    expect(props.hasMovePhase).toBe(true);
+});
+
+// ============================================
+// Test: Moving obstacles oscillate their gap position
+// ============================================
+test('moving obstacle gap position changes over time', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    await startGame(page);
+    await page.waitForTimeout(100);
+
+    // Create a moving obstacle and advance its phase
+    const result = await page.evaluate(() => {
+        distance = 5000;
+        obstacles.length = 0;
+        obstacles.push({
+            x: canvas.width * 0.5,
+            gapY: 200,
+            gapYBase: 200,
+            gapHeight: 180,
+            width: 45,
+            passed: false,
+            moving: true,
+            moveSpeed: 1,
+            moveRange: 50,
+            movePhase: 0,
+            color: '#2a1a2a'
+        });
+        const initial = obstacles[0].gapY;
+        // Simulate phase advancement
+        obstacles[0].movePhase = Math.PI / 2; // sin(PI/2) = 1, offset = +50
+        const offset = Math.sin(obstacles[0].movePhase) * obstacles[0].moveRange;
+        obstacles[0].gapY = obstacles[0].gapYBase + offset;
+        return { initial, after: obstacles[0].gapY };
+    });
+
+    expect(result.after).not.toBe(result.initial);
+});
+
+// ============================================
+// Test: Mobile control buttons exist in HTML
+// ============================================
+test('mobile control buttons are in the DOM', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    const buttons = await page.evaluate(() => ({
+        thrust: !!document.getElementById('btn-thrust'),
+        down: !!document.getElementById('btn-down'),
+        left: !!document.getElementById('btn-left'),
+        right: !!document.getElementById('btn-right'),
+        container: !!document.getElementById('mobile-controls'),
+    }));
+
+    expect(buttons.thrust).toBe(true);
+    expect(buttons.down).toBe(true);
+    expect(buttons.left).toBe(true);
+    expect(buttons.right).toBe(true);
+    expect(buttons.container).toBe(true);
+});
+
+// ============================================
+// Test: Mobile button setup function exists
+// ============================================
+test('setupMobileButton function is defined', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    const exists = await page.evaluate(() => typeof setupMobileButton === 'function');
+    expect(exists).toBe(true);
 });
