@@ -3,7 +3,7 @@
 // A side-scrolling browser game where you fly and collect stars
 // ============================================
 
-const GAME_VERSION = '1.2.0';
+const GAME_VERSION = '1.3.0';
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -287,6 +287,65 @@ function saveToLeaderboard(score) {
 // --- Persistent High Score ---
 var highScore = parseInt(localStorage.getItem('flyHighScore') || '0', 10);
 
+// --- Achievements ---
+const ACHIEVEMENTS_KEY = 'flyHighAchievements';
+const ACHIEVEMENT_DEFS = [
+    { id: 'first_star',     name: 'First Light',       desc: 'Collect your first star',        check: (s) => s.totalStars >= 1 },
+    { id: 'stars_50',       name: 'Star Gazer',        desc: 'Collect 50 stars in one run',    check: (s) => s.starsCollected >= 50 },
+    { id: 'stars_100',      name: 'Star Hunter',       desc: 'Collect 100 stars in one run',   check: (s) => s.starsCollected >= 100 },
+    { id: 'dist_500',       name: 'Explorer',          desc: 'Travel 500m',                    check: (s) => s.distance >= 500 },
+    { id: 'dist_2000',      name: 'Voyager',           desc: 'Travel 2,000m',                  check: (s) => s.distance >= 2000 },
+    { id: 'dist_5000',      name: 'Deep Space',        desc: 'Travel 5,000m',                  check: (s) => s.distance >= 5000 },
+    { id: 'score_50',       name: 'Scoring',           desc: 'Score 50 points',                check: (s) => s.score >= 50 },
+    { id: 'score_200',      name: 'High Flyer',        desc: 'Score 200 points',               check: (s) => s.score >= 200 },
+    { id: 'combo_5',        name: 'Combo Starter',     desc: 'Get a 5x combo',                 check: (s) => s.combo >= 5 },
+    { id: 'combo_15',       name: 'Combo Master',      desc: 'Get a 15x combo',                check: (s) => s.combo >= 15 },
+    { id: 'rainbow',        name: 'Pot of Gold',       desc: 'Collect a rainbow star',         check: (s) => s.collectedRainbow },
+    { id: 'powerup_all',    name: 'Fully Loaded',      desc: 'Collect all 3 power-up types',   check: (s) => s.powerupsUsed.size >= 3 },
+    { id: 'nightmare',      name: 'Nightmare Mode',    desc: 'Reach NIGHTMARE difficulty',     check: (s) => s.distance >= 5000 },
+];
+
+var unlockedAchievements = JSON.parse(localStorage.getItem(ACHIEVEMENTS_KEY) || '[]');
+var achievementPopup = null; // { name, desc, life }
+var sessionPowerupsUsed = new Set();
+var sessionCollectedRainbow = false;
+var sessionMaxCombo = 0;
+
+function checkAchievements() {
+    const stats = {
+        totalStars: starsCollected,
+        starsCollected: starsCollected,
+        distance: distance,
+        score: score,
+        combo: sessionMaxCombo,
+        collectedRainbow: sessionCollectedRainbow,
+        powerupsUsed: sessionPowerupsUsed,
+    };
+
+    for (const def of ACHIEVEMENT_DEFS) {
+        if (unlockedAchievements.includes(def.id)) continue;
+        if (def.check(stats)) {
+            unlockedAchievements.push(def.id);
+            localStorage.setItem(ACHIEVEMENTS_KEY, JSON.stringify(unlockedAchievements));
+            achievementPopup = { name: def.name, desc: def.desc, life: 3.0 };
+        }
+    }
+}
+
+// --- Themed backgrounds ---
+const THEMES = [
+    { name: 'space',   gradTop: '#0a0a2e', gradMid: '#1a1a4e', gradBot: '#0d0d35', starColor: '#ffffff', nearColor: '#aabbff' },
+    { name: 'nebula',  gradTop: '#1a0a2e', gradMid: '#2a1a4e', gradBot: '#150d35', starColor: '#ffccff', nearColor: '#dd88ff' },
+    { name: 'deep',    gradTop: '#020210', gradMid: '#0a0a30', gradBot: '#050520', starColor: '#8888cc', nearColor: '#6666aa' },
+    { name: 'aurora',  gradTop: '#0a1a2e', gradMid: '#102a3e', gradBot: '#081828', starColor: '#aaffcc', nearColor: '#66ddaa' },
+];
+
+function getThemeForDistance() {
+    // Theme changes every 1500m
+    const idx = Math.floor(distance / 1500) % THEMES.length;
+    return THEMES[idx];
+}
+
 // --- Game State (var for test access via window) ---
 var state = 'start'; // 'start', 'playing', 'dead'
 var score = 0;
@@ -548,6 +607,10 @@ function startGame() {
     lastStarMilestone = 0;
     starsCollected = 0;
     distanceRecord = false;
+    sessionPowerupsUsed = new Set();
+    sessionCollectedRainbow = false;
+    sessionMaxCombo = 0;
+    achievementPopup = null;
     playStartSound();
     if (!musicPlaying) startMusic();
 
@@ -580,6 +643,7 @@ function die() {
         localStorage.setItem(BEST_DISTANCE_KEY, String(bestDistance));
     }
     saveToLeaderboard(score);
+    checkAchievements();
     emitParticles(player.x, player.y, '#ff4444', 30);
     playDeathSound();
     shakeIntensity = 12;
@@ -746,6 +810,8 @@ function update() {
             emitParticles(star.x, star.y, particleColor, 12);
             playCollectSound();
             starsCollected++;
+            if (star.starType === 'rainbow') sessionCollectedRainbow = true;
+            if (combo > sessionMaxCombo) sessionMaxCombo = combo;
             // Star milestone every 10 stars
             if (starsCollected > 0 && starsCollected % 10 === 0 && starsCollected > lastStarMilestone) {
                 lastStarMilestone = starsCollected;
@@ -869,6 +935,7 @@ function update() {
         if (dist < PLAYER_SIZE + powerups[i].size) {
             powerups[i].collected = true;
             activePowerup = { type: powerups[i].type, timer: POWERUP_DURATION };
+            sessionPowerupsUsed.add(powerups[i].type);
             emitParticles(powerups[i].x, powerups[i].y, powerups[i].color, 15);
             playPowerupSound();
             triggerFlash(powerups[i].color);
@@ -968,22 +1035,35 @@ function update() {
         screenFlash.alpha -= 0.02;
         if (screenFlash.alpha < 0) screenFlash.alpha = 0;
     }
+
+    // Achievement popup decay
+    if (achievementPopup) {
+        achievementPopup.life -= 0.016;
+        if (achievementPopup.life <= 0) achievementPopup = null;
+    }
+
+    // Check achievements every 30 frames
+    if (frameCount % 30 === 0) {
+        checkAchievements();
+    }
 }
 
 // --- Draw ---
 
 function drawBackground() {
+    const theme = (state === 'playing' || state === 'dead') ? getThemeForDistance() : THEMES[0];
+
     const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
-    grad.addColorStop(0, '#0a0a2e');
-    grad.addColorStop(0.5, '#1a1a4e');
-    grad.addColorStop(1, '#0d0d35');
+    grad.addColorStop(0, theme.gradTop);
+    grad.addColorStop(0.5, theme.gradMid);
+    grad.addColorStop(1, theme.gradBot);
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     for (const s of bgStarsFar) {
         const twinkle = Math.sin(frameCount * s.twinkleSpeed) * 0.3 + s.brightness;
         ctx.globalAlpha = twinkle;
-        ctx.fillStyle = '#ffffff';
+        ctx.fillStyle = theme.starColor;
         ctx.beginPath();
         ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
         ctx.fill();
@@ -991,7 +1071,7 @@ function drawBackground() {
     for (const s of bgStarsNear) {
         const twinkle = Math.sin(frameCount * s.twinkleSpeed) * 0.3 + s.brightness;
         ctx.globalAlpha = twinkle * 0.7;
-        ctx.fillStyle = '#aabbff';
+        ctx.fillStyle = theme.nearColor;
         ctx.beginPath();
         ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
         ctx.fill();
@@ -1465,15 +1545,60 @@ function drawStartScreen() {
         }
     }
 
-    // Version
+    // Version and achievements
     ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
     ctx.font = '12px Segoe UI, sans-serif';
     ctx.fillText(`v${GAME_VERSION}`, canvas.width / 2, canvas.height - 30);
+
+    if (unlockedAchievements.length > 0) {
+        ctx.fillStyle = 'rgba(255, 215, 0, 0.4)';
+        ctx.fillText(`🏆 ${unlockedAchievements.length}/${ACHIEVEMENT_DEFS.length}`, canvas.width / 2, canvas.height - 50);
+    }
 
     ctx.textAlign = 'left';
 }
 
 // --- Main Loop ---
+
+function drawAchievementPopup() {
+    if (!achievementPopup || state !== 'playing') return;
+
+    const alpha = Math.min(achievementPopup.life, 1);
+    const y = canvas.height - 80;
+    const x = canvas.width / 2;
+
+    // Background pill
+    ctx.globalAlpha = alpha * 0.8;
+    ctx.fillStyle = '#1a1a3a';
+    ctx.strokeStyle = '#ffd700';
+    ctx.lineWidth = 2;
+    const pillW = 260;
+    const pillH = 50;
+    ctx.beginPath();
+    ctx.roundRect(x - pillW / 2, y - pillH / 2, pillW, pillH, 12);
+    ctx.fill();
+    ctx.stroke();
+
+    // Trophy icon
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = '#ffd700';
+    ctx.font = '20px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('🏆', x - pillW / 2 + 12, y + 7);
+
+    // Achievement name
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 15px Segoe UI, sans-serif';
+    ctx.fillText(achievementPopup.name, x - pillW / 2 + 42, y - 4);
+
+    // Description
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+    ctx.font = '12px Segoe UI, sans-serif';
+    ctx.fillText(achievementPopup.desc, x - pillW / 2 + 42, y + 14);
+
+    ctx.globalAlpha = 1;
+    ctx.textAlign = 'left';
+}
 
 function drawMilestones() {
     for (const m of milestones) {
@@ -1558,6 +1683,7 @@ function gameLoop() {
         drawComboHUD();
         drawComboPopups();
         drawMilestones();
+        drawAchievementPopup();
     }
 
     drawParticles();

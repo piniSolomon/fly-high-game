@@ -519,12 +519,12 @@ test('favicon is linked in HTML', async ({ page }) => {
 // ============================================
 // Test: Version is updated to 0.5.0
 // ============================================
-test('game version is 1.2.0', async ({ page }) => {
+test('game version is 1.3.0', async ({ page }) => {
     await page.goto('/index.html');
     await page.waitForTimeout(300);
 
     const version = await page.evaluate(() => GAME_VERSION);
-    expect(version).toBe('1.2.0');
+    expect(version).toBe('1.3.0');
 });
 
 // ============================================
@@ -1209,4 +1209,107 @@ test('game runs without console errors during gameplay', async ({ page }) => {
         return state === 'playing' || state === 'dead';
     });
     expect(errors).toBe(true);
+});
+
+// ============================================
+// Test: Achievement definitions exist
+// ============================================
+test('achievement definitions are defined', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    const count = await page.evaluate(() => ACHIEVEMENT_DEFS.length);
+    expect(count).toBeGreaterThanOrEqual(10);
+
+    const ids = await page.evaluate(() => ACHIEVEMENT_DEFS.map(a => a.id));
+    expect(ids).toContain('first_star');
+    expect(ids).toContain('dist_5000');
+    expect(ids).toContain('combo_5');
+    expect(ids).toContain('rainbow');
+});
+
+// ============================================
+// Test: Achievement unlocks on condition met
+// ============================================
+test('achievement unlocks when condition is met', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    await startGame(page);
+    await page.waitForTimeout(100);
+
+    // Clear previous achievements and simulate collecting a star
+    await page.evaluate(() => {
+        unlockedAchievements = [];
+        localStorage.removeItem('flyHighAchievements');
+        starsCollected = 1;
+        checkAchievements();
+    });
+
+    const unlocked = await page.evaluate(() => unlockedAchievements);
+    expect(unlocked).toContain('first_star');
+});
+
+// ============================================
+// Test: Achievement popup appears
+// ============================================
+test('achievement popup is set when unlocked', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    await startGame(page);
+    await page.waitForTimeout(100);
+
+    await page.evaluate(() => {
+        unlockedAchievements = [];
+        starsCollected = 1;
+        checkAchievements();
+    });
+
+    const popup = await page.evaluate(() => achievementPopup);
+    expect(popup).not.toBeNull();
+    expect(popup.name).toBe('First Light');
+});
+
+// ============================================
+// Test: Achievements persist to localStorage
+// ============================================
+test('achievements persist across reloads', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    await page.evaluate(() => {
+        localStorage.setItem('flyHighAchievements', JSON.stringify(['first_star', 'dist_500']));
+    });
+
+    await page.reload();
+    await page.waitForTimeout(500);
+
+    const unlocked = await page.evaluate(() => unlockedAchievements);
+    expect(unlocked).toContain('first_star');
+    expect(unlocked).toContain('dist_500');
+});
+
+// ============================================
+// Test: Themed backgrounds change with distance
+// ============================================
+test('background themes exist and rotate with distance', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    const themes = await page.evaluate(() => THEMES.map(t => t.name));
+    expect(themes.length).toBeGreaterThanOrEqual(4);
+    expect(themes).toContain('space');
+    expect(themes).toContain('nebula');
+
+    // Check theme rotation
+    const themeAtDistances = await page.evaluate(() => {
+        return [0, 1500, 3000, 4500].map(d => {
+            distance = d;
+            return getThemeForDistance().name;
+        });
+    });
+
+    // Each should be different (cycling through 4 themes)
+    expect(new Set(themeAtDistances).size).toBe(4);
 });
