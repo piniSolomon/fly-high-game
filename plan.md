@@ -2,48 +2,41 @@
 
 ## Current Goal
 
-Continue polishing and adding features to make the game more engaging.
+Continue adding features and polish — the game should always get better.
 
 ## Tasks
 
 ### Completed
-- [x] Set up project scaffolding (index.html, style.css, game.js)
-- [x] Create a canvas-based game loop (requestAnimationFrame)
-- [x] Add a player character that flies (responds to keyboard/mouse input)
-- [x] Add gravity and upward thrust mechanics
-- [x] Add star collectibles with collision detection
-- [x] Add score counter displayed on screen
-- [x] Add basic visual polish (background, colors, simple animations)
-- [x] Make the game restart-able on boundary hit
-- [x] Initialize git repo and make first commit
-- [x] Add horizontal scrolling / side-scroller feel
-- [x] Add obstacles (rock pillars with gaps)
-- [x] Add increasing difficulty (speed over time)
-- [x] Add persistent high score (localStorage)
-- [x] Add distance counter HUD
-- [x] Add parallax background (two-layer star field)
-- [x] Set up Playwright E2E tests (26 tests, all passing)
-- [x] Add full directional controls (Arrow keys / WASD)
+- [x] Project scaffolding and canvas game loop
+- [x] Player with gravity/thrust and directional controls (WASD/arrows)
+- [x] Star collectibles with collision detection and scoring
+- [x] Side-scrolling with obstacle pillars
+- [x] Increasing difficulty (speed over time)
+- [x] Persistent high score (localStorage)
+- [x] Parallax two-layer background
+- [x] E2E test suite (32 tests, all passing)
+- [x] Sound effects (thrust, collect, death, start, power-up)
+- [x] SVG favicon
+- [x] Combo/streak system with multipliers and popups
+- [x] Screen shake on death
+- [x] Game version display (SemVer — v0.7.0)
+- [x] Power-ups: shield, magnet, slow-mo
+- [x] Pause menu (Escape key)
 - [x] Lighter gravity for better flight feel
-- [x] Add game version display (SemVer)
-- [x] Add sound effects (thrust, collect, death, start)
-- [x] Add SVG favicon
-- [x] Add combo/streak system with multipliers
-- [x] Add screen shake on death
 
 ### Next Up
-- [ ] Add mobile on-screen touch controls (virtual D-pad or swipe zones)
-- [ ] Add power-ups (shield, magnet, speed boost)
-- [ ] Add background music (ambient space theme)
-- [ ] Improve player visual (animated wings or better rocket detail)
 - [ ] Add different star types (gold, silver, rare rainbow worth more)
-- [ ] Add a pause menu (press Escape)
 - [ ] Add smooth difficulty curve (obstacle gap narrows gradually)
-- [ ] Add leaderboard display on start screen (top 5 scores)
+- [ ] Add leaderboard display on start screen (top 5 scores from localStorage)
+- [ ] Improve player visual (wing flap animation or rocket detail)
+- [ ] Add background music (ambient space theme, toggleable)
+- [ ] Add mobile on-screen touch controls
+- [ ] Add trail color changes based on active power-up
+- [ ] Add milestone notifications (every 10 stars, distance records)
 
 ## Status
 
-v0.6.0 complete. Full-featured side-scroller with directional controls, obstacles, combo system, screen shake, sound effects, 26 E2E tests all green.
+v0.7.0 — full-featured game with power-ups, pause, combo system, 32 E2E tests.
 
 ## Open Questions
 
@@ -51,11 +44,10 @@ None.
 
 ## Learnings
 
-- Canvas game loop with requestAnimationFrame works well
-- Particle effects add visual polish for minimal code
-- `var` needed for E2E test access via `page.evaluate()`
-- Lighter gravity (0.22) feels much better
-- E2E tests need deterministic setups for reliability
-- Web Audio API procedural sounds work great without any files
-- Combo systems need visible feedback (popups, HUD bar) to feel rewarding
-- Screen shake adds excellent game feel for death impact
+- `var` scope needed for E2E test access
+- Web Audio API procedural sounds work great
+- Combo systems need visible feedback (popups + timer bar)
+- Screen shake adds excellent game feel
+- Power-up effectiveSpeed multiplier cleanly slows everything
+- Pause requires checking `paused` flag at top of update loop
+- E2E test determinism: force-spawn and teleport > playing through
