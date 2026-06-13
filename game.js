@@ -3,7 +3,7 @@
 // A side-scrolling browser game where you fly and collect stars
 // ============================================
 
-const GAME_VERSION = '2.2.0';
+const GAME_VERSION = '2.3.0';
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -402,6 +402,36 @@ const ACHIEVEMENT_DEFS = [
 var unlockedAchievements = JSON.parse(localStorage.getItem(ACHIEVEMENTS_KEY) || '[]');
 var achievementPopup = null; // { name, desc, life }
 var showingAchievements = false;
+
+// Player skins — unlocked via achievements
+const PLAYER_SKINS = [
+    { id: 'default',  name: 'Blue Rocket',   color: '#4488ff', stripe: '#5599ff', unlock: null },
+    { id: 'gold',     name: 'Golden Rocket',  color: '#ffd700', stripe: '#ffee55', unlock: 'score_200' },
+    { id: 'ruby',     name: 'Ruby Rocket',    color: '#ff4466', stripe: '#ff6688', unlock: 'stars_100' },
+    { id: 'emerald',  name: 'Emerald Rocket', color: '#44dd88', stripe: '#66ffaa', unlock: 'dist_5000' },
+    { id: 'phantom',  name: 'Phantom Rocket', color: '#8866cc', stripe: '#aa88ee', unlock: 'nightmare' },
+    { id: 'rainbow',  name: 'Rainbow Rocket', color: 'rainbow',  stripe: 'rainbow',  unlock: 'powerup_all' },
+];
+
+const SKIN_KEY = 'flyHighSkin';
+var currentSkinId = localStorage.getItem(SKIN_KEY) || 'default';
+
+function getCurrentSkin() {
+    return PLAYER_SKINS.find(s => s.id === currentSkinId) || PLAYER_SKINS[0];
+}
+
+function isSkinUnlocked(skin) {
+    if (!skin.unlock) return true;
+    return unlockedAchievements.includes(skin.unlock);
+}
+
+function selectSkin(skinId) {
+    const skin = PLAYER_SKINS.find(s => s.id === skinId);
+    if (skin && isSkinUnlocked(skin)) {
+        currentSkinId = skinId;
+        localStorage.setItem(SKIN_KEY, skinId);
+    }
+}
 var sessionPowerupsUsed = new Set();
 var sessionCollectedRainbow = false;
 var sessionMaxCombo = 0;
@@ -597,6 +627,19 @@ window.addEventListener('keydown', (e) => {
     // Zen mode toggle
     if (e.code === 'KeyZ' && (state === 'start' || state === 'dead')) {
         zenMode = !zenMode;
+        return;
+    }
+    // Skin cycling with [ and ]
+    if ((e.code === 'BracketLeft' || e.code === 'BracketRight') && state === 'start') {
+        const unlocked = PLAYER_SKINS.filter(s => isSkinUnlocked(s));
+        const curIdx = unlocked.findIndex(s => s.id === currentSkinId);
+        if (e.code === 'BracketRight') {
+            const nextIdx = (curIdx + 1) % unlocked.length;
+            selectSkin(unlocked[nextIdx].id);
+        } else {
+            const prevIdx = (curIdx - 1 + unlocked.length) % unlocked.length;
+            selectSkin(unlocked[prevIdx].id);
+        }
         return;
     }
     // Pause toggle
@@ -1523,8 +1566,20 @@ function drawPlayer() {
 
     const S = PLAYER_SIZE;
 
+    const skin = getCurrentSkin();
+    let skinColor = skin.color;
+    let skinStripe = skin.stripe;
+    // Rainbow skin cycles hue
+    if (skinColor === 'rainbow') {
+        const hue = (frameCount * 2) % 360;
+        skinColor = `hsl(${hue}, 80%, 55%)`;
+        skinStripe = `hsl(${(hue + 30) % 360}, 80%, 65%)`;
+    }
+    // Derive fin color (darker version of body)
+    const finColor = skinColor.startsWith('hsl') ? skinColor.replace('55%', '35%') : lerpColor(skinColor, '#000000', 0.4);
+
     // --- Fins (behind body) ---
-    ctx.fillStyle = '#2266cc';
+    ctx.fillStyle = finColor;
     // Top fin
     ctx.beginPath();
     ctx.moveTo(-S * 0.5, -S * 0.4);
@@ -1541,7 +1596,7 @@ function drawPlayer() {
     ctx.fill();
 
     // --- Body (sleek rocket) ---
-    ctx.fillStyle = '#4488ff';
+    ctx.fillStyle = skinColor;
     ctx.beginPath();
     ctx.moveTo(S * 1.1, 0);                    // nose tip
     ctx.quadraticCurveTo(S * 0.6, -S * 0.5, -S * 0.5, -S * 0.45);  // top curve
@@ -1551,13 +1606,13 @@ function drawPlayer() {
     ctx.fill();
 
     // Body glow
-    ctx.shadowColor = '#4488ff';
+    ctx.shadowColor = skinColor;
     ctx.shadowBlur = 12;
     ctx.fill();
     ctx.shadowBlur = 0;
 
     // --- Body stripe ---
-    ctx.fillStyle = '#5599ff';
+    ctx.fillStyle = skinStripe;
     ctx.beginPath();
     ctx.moveTo(S * 0.8, 0);
     ctx.quadraticCurveTo(S * 0.4, -S * 0.18, -S * 0.3, -S * 0.15);
@@ -1582,7 +1637,7 @@ function drawPlayer() {
     ctx.fill();
 
     // --- Nose tip highlight ---
-    ctx.fillStyle = '#66aaff';
+    ctx.fillStyle = skinStripe;
     ctx.beginPath();
     ctx.arc(S * 0.95, 0, S * 0.08, 0, Math.PI * 2);
     ctx.fill();
@@ -2191,6 +2246,13 @@ function drawStartScreen() {
         ctx.font = 'bold 16px Segoe UI, sans-serif';
         ctx.fillText('ZEN MODE ON', canvas.width / 2, canvas.height / 2 + 115);
     }
+
+    // Current skin indicator
+    const skin = getCurrentSkin();
+    const unlockedSkins = PLAYER_SKINS.filter(s => isSkinUnlocked(s));
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.font = '13px Segoe UI, sans-serif';
+    ctx.fillText(`Skin: ${skin.name} [${unlockedSkins.length}/${PLAYER_SKINS.length}]  ◀ [ ] ▶`, canvas.width / 2, canvas.height / 2 + (zenMode ? 135 : 115));
 
     if (highScore > 0) {
         ctx.fillStyle = '#ffd700';

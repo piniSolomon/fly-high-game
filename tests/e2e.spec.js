@@ -521,12 +521,12 @@ test('favicon is linked in HTML', async ({ page }) => {
 // ============================================
 // Test: Version is updated to 0.5.0
 // ============================================
-test('game version is 2.2.0', async ({ page }) => {
+test('game version is 2.3.0', async ({ page }) => {
     await page.goto('/index.html');
     await page.waitForTimeout(300);
 
     const version = await page.evaluate(() => GAME_VERSION);
-    expect(version).toBe('2.2.0');
+    expect(version).toBe('2.3.0');
 });
 
 // ============================================
@@ -1888,4 +1888,62 @@ test('updateMusicChord function is defined', async ({ page }) => {
 
     const exists = await page.evaluate(() => typeof updateMusicChord === 'function');
     expect(exists).toBe(true);
+});
+
+// ============================================
+// Test: Player skins are defined
+// ============================================
+test('player skins are defined with unlock requirements', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    const skins = await page.evaluate(() => PLAYER_SKINS.map(s => ({
+        id: s.id, name: s.name, hasColor: !!s.color, unlock: s.unlock
+    })));
+
+    expect(skins.length).toBeGreaterThanOrEqual(6);
+    expect(skins[0].unlock).toBeNull(); // default is free
+    expect(skins.find(s => s.id === 'rainbow')).toBeTruthy();
+});
+
+// ============================================
+// Test: Default skin is selected initially
+// ============================================
+test('default skin is selected', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    const skin = await page.evaluate(() => getCurrentSkin());
+    expect(skin.id).toBe('default');
+});
+
+// ============================================
+// Test: Skin selection and persistence
+// ============================================
+test('selectSkin changes current skin and persists', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    // Default skin is always unlocked, can select it
+    await page.evaluate(() => {
+        selectSkin('default');
+    });
+    const id = await page.evaluate(() => currentSkinId);
+    expect(id).toBe('default');
+
+    // Can't select locked skin
+    await page.evaluate(() => {
+        unlockedAchievements = []; // clear all
+        selectSkin('gold'); // requires score_200
+    });
+    const stillDefault = await page.evaluate(() => currentSkinId);
+    expect(stillDefault).toBe('default');
+
+    // Can select when achievement unlocked
+    await page.evaluate(() => {
+        unlockedAchievements = ['score_200'];
+        selectSkin('gold');
+    });
+    const nowGold = await page.evaluate(() => currentSkinId);
+    expect(nowGold).toBe('gold');
 });
