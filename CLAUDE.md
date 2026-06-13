@@ -123,6 +123,31 @@ You maintain a `plan.md` file that describes:
 
 ---
 
+# E2E Testing (Mandatory)
+
+**Every feature must have end-to-end tests.** This is non-negotiable.
+
+## Rules
+
+1. **No feature ships without tests.** When you add or change a feature, write E2E tests for it in the same iteration.
+2. **Use Playwright** via the MCP browser tools for E2E testing. Tests should launch the game in a browser and verify behavior through screenshots, DOM state, and simulated input.
+3. **Test file:** All E2E tests live in `tests/e2e.spec.js` (or split into multiple files under `tests/` as the suite grows).
+4. **What to test:**
+   - Game loads and shows start screen
+   - Game starts on input (click/space/tap)
+   - Player responds to thrust input
+   - Stars appear and can be collected (score increments)
+   - Obstacles appear and cause death on collision
+   - Game over screen shows with score
+   - Game restarts correctly
+   - High score persists in localStorage
+   - Speed increases over time
+   - Any new feature added
+5. **Run tests after every change.** If tests fail, fix the code before moving on.
+6. **Tests must pass before committing.** Never commit with failing tests.
+
+---
+
 # Working with MD Files
 
 You are expected to help the human write better MD files. This means:
