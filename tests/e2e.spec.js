@@ -519,12 +519,12 @@ test('favicon is linked in HTML', async ({ page }) => {
 // ============================================
 // Test: Version is updated to 0.5.0
 // ============================================
-test('game version is 0.9.0', async ({ page }) => {
+test('game version is 1.0.0', async ({ page }) => {
     await page.goto('/index.html');
     await page.waitForTimeout(300);
 
     const version = await page.evaluate(() => GAME_VERSION);
-    expect(version).toBe('0.9.0');
+    expect(version).toBe('1.0.0');
 });
 
 // ============================================
@@ -983,4 +983,83 @@ test('best distance variable persists across reloads', async ({ page }) => {
 
     const bd = await page.evaluate(() => bestDistance);
     expect(bd).toBe(1234);
+});
+
+// ============================================
+// Test: Music toggle works
+// ============================================
+test('music toggle functions exist', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    const fns = await page.evaluate(() => ({
+        startMusic: typeof startMusic === 'function',
+        stopMusic: typeof stopMusic === 'function',
+        toggleMusic: typeof toggleMusic === 'function',
+    }));
+
+    expect(fns.startMusic).toBe(true);
+    expect(fns.stopMusic).toBe(true);
+    expect(fns.toggleMusic).toBe(true);
+});
+
+// ============================================
+// Test: Music starts on game start
+// ============================================
+test('music starts when game starts', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    const beforeMusic = await page.evaluate(() => musicPlaying);
+    expect(beforeMusic).toBe(false);
+
+    await startGame(page);
+    await page.waitForTimeout(200);
+
+    const afterMusic = await page.evaluate(() => musicPlaying);
+    expect(afterMusic).toBe(true);
+});
+
+// ============================================
+// Test: Screen flash function exists and triggers
+// ============================================
+test('screen flash triggers on power-up', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    await startGame(page);
+    await page.waitForTimeout(100);
+
+    // Trigger a flash manually
+    await page.evaluate(() => {
+        triggerFlash('#44ddff');
+    });
+
+    const flash = await page.evaluate(() => screenFlash);
+    expect(flash.alpha).toBeGreaterThan(0);
+    expect(flash.color).toBe('#44ddff');
+});
+
+// ============================================
+// Test: Difficulty labels change with distance
+// ============================================
+test('difficulty label changes with distance', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    const labels = await page.evaluate(() => {
+        const results = [];
+        const distances = [0, 500, 1500, 3000, 5000];
+        for (const d of distances) {
+            distance = d;
+            results.push(getDifficultyLabel().label);
+        }
+        return results;
+    });
+
+    expect(labels[0]).toBe('EASY');
+    expect(labels[1]).toBe('MEDIUM');
+    expect(labels[2]).toBe('HARD');
+    expect(labels[3]).toBe('INSANE');
+    expect(labels[4]).toBe('NIGHTMARE');
 });

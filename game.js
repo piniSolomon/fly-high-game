@@ -3,7 +3,7 @@
 // A side-scrolling browser game where you fly and collect stars
 // ============================================
 
-const GAME_VERSION = '0.9.0';
+const GAME_VERSION = '1.0.0';
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -121,6 +121,73 @@ function playPowerupSound() {
         osc.start(t);
         osc.stop(t + 0.12);
     });
+}
+
+// --- Background Music (procedural ambient) ---
+var musicPlaying = false;
+var musicGainNode = null;
+var musicOscillators = [];
+
+function startMusic() {
+    if (!audioEnabled || !audioCtx || musicPlaying) return;
+    musicPlaying = true;
+
+    musicGainNode = audioCtx.createGain();
+    musicGainNode.gain.setValueAtTime(0.04, audioCtx.currentTime);
+    musicGainNode.connect(audioCtx.destination);
+
+    // Ambient pad — two detuned oscillators for thickness
+    const freqs = [110, 165, 220]; // A2, E3, A3 — open fifth drone
+    freqs.forEach((freq, i) => {
+        const osc = audioCtx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+
+        const oscGain = audioCtx.createGain();
+        oscGain.gain.setValueAtTime(i === 0 ? 0.5 : 0.3, audioCtx.currentTime);
+
+        osc.connect(oscGain);
+        oscGain.connect(musicGainNode);
+        osc.start();
+        musicOscillators.push(osc);
+
+        // Slightly detuned copy for width
+        const osc2 = audioCtx.createOscillator();
+        osc2.type = 'sine';
+        osc2.frequency.setValueAtTime(freq * 1.003, audioCtx.currentTime);
+        const osc2Gain = audioCtx.createGain();
+        osc2Gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+        osc2.connect(osc2Gain);
+        osc2Gain.connect(musicGainNode);
+        osc2.start();
+        musicOscillators.push(osc2);
+    });
+}
+
+function stopMusic() {
+    if (!musicPlaying) return;
+    musicPlaying = false;
+    for (const osc of musicOscillators) {
+        try { osc.stop(); } catch (e) { /* already stopped */ }
+    }
+    musicOscillators = [];
+    musicGainNode = null;
+}
+
+function toggleMusic() {
+    if (musicPlaying) {
+        stopMusic();
+    } else {
+        initAudio();
+        startMusic();
+    }
+}
+
+// Screen flash
+var screenFlash = { alpha: 0, color: '#ffffff' };
+
+function triggerFlash(color) {
+    screenFlash = { alpha: 0.4, color: color || '#ffffff' };
 }
 
 // --- Background Stars (parallax decoration) ---
@@ -292,8 +359,13 @@ var isThrusting = false;
 window.addEventListener('keydown', (e) => {
     keys[e.code] = true;
     if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
-         'KeyW', 'KeyA', 'KeyS', 'KeyD', 'Escape'].includes(e.code)) {
+         'KeyW', 'KeyA', 'KeyS', 'KeyD', 'Escape', 'KeyM'].includes(e.code)) {
         e.preventDefault();
+    }
+    // Music toggle
+    if (e.code === 'KeyM') {
+        toggleMusic();
+        return;
     }
     // Pause toggle
     if (e.code === 'Escape' && state === 'playing') {
@@ -433,6 +505,7 @@ function startGame() {
     starsCollected = 0;
     distanceRecord = false;
     playStartSound();
+    if (!musicPlaying) startMusic();
 
     // Spawn initial stars ahead
     for (let i = 0; i < 5; i++) {
@@ -743,6 +816,7 @@ function update() {
             activePowerup = { type: powerups[i].type, timer: POWERUP_DURATION };
             emitParticles(powerups[i].x, powerups[i].y, powerups[i].color, 15);
             playPowerupSound();
+            triggerFlash(powerups[i].color);
             comboPopups.push({
                 x: powerups[i].x,
                 y: powerups[i].y - 15,
@@ -832,6 +906,12 @@ function update() {
         if (shakeDuration <= 0) {
             shakeIntensity = 0;
         }
+    }
+
+    // Screen flash decay
+    if (screenFlash.alpha > 0) {
+        screenFlash.alpha -= 0.02;
+        if (screenFlash.alpha < 0) screenFlash.alpha = 0;
     }
 }
 
@@ -1116,6 +1196,14 @@ function drawParticles() {
     ctx.globalAlpha = 1;
 }
 
+function getDifficultyLabel() {
+    if (distance < 500) return { label: 'EASY', color: '#44ff88' };
+    if (distance < 1500) return { label: 'MEDIUM', color: '#ffdd44' };
+    if (distance < 3000) return { label: 'HARD', color: '#ff8844' };
+    if (distance < 5000) return { label: 'INSANE', color: '#ff4444' };
+    return { label: 'NIGHTMARE', color: '#ff00ff' };
+}
+
 function drawHUD() {
     if (state !== 'playing') return;
 
@@ -1130,7 +1218,28 @@ function drawHUD() {
     ctx.font = '13px Segoe UI, sans-serif';
     ctx.fillText(`Speed +${speedPct}%`, canvas.width - 20, 58);
 
+    // Difficulty indicator
+    const diff = getDifficultyLabel();
+    ctx.fillStyle = diff.color;
+    ctx.globalAlpha = 0.6;
+    ctx.font = 'bold 11px Segoe UI, sans-serif';
+    ctx.fillText(diff.label, canvas.width - 20, 75);
+    ctx.globalAlpha = 1;
+
+    // Music indicator
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
+    ctx.font = '11px Segoe UI, sans-serif';
+    ctx.fillText(musicPlaying ? '♪ M' : '♪ off', canvas.width - 20, 92);
+
     ctx.textAlign = 'left';
+}
+
+function drawScreenFlash() {
+    if (screenFlash.alpha <= 0) return;
+    ctx.globalAlpha = screenFlash.alpha;
+    ctx.fillStyle = screenFlash.color;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.globalAlpha = 1;
 }
 
 function drawStartScreen() {
@@ -1150,23 +1259,24 @@ function drawStartScreen() {
     ctx.font = '16px Segoe UI, sans-serif';
     ctx.fillText('Arrow Keys / WASD to move', canvas.width / 2, canvas.height / 2 + 25);
     ctx.fillText('Space / Click / Tap to thrust up', canvas.width / 2, canvas.height / 2 + 50);
+    ctx.fillText('M = Music  |  Esc = Pause', canvas.width / 2, canvas.height / 2 + 72);
 
     if (highScore > 0) {
         ctx.fillStyle = '#ffd700';
         ctx.font = '18px Segoe UI, sans-serif';
-        ctx.fillText(`Best: ${highScore}`, canvas.width / 2, canvas.height / 2 + 90);
+        ctx.fillText(`Best: ${highScore}`, canvas.width / 2, canvas.height / 2 + 105);
 
         if (bestDistance > 0) {
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.font = '15px Segoe UI, sans-serif';
-            ctx.fillText(`Farthest: ${Math.floor(bestDistance).toLocaleString()}m`, canvas.width / 2, canvas.height / 2 + 112);
+            ctx.fillText(`Farthest: ${Math.floor(bestDistance).toLocaleString()}m`, canvas.width / 2, canvas.height / 2 + 127);
         }
     }
 
     // Leaderboard
     if (leaderboard.length > 0) {
         const lbX = canvas.width / 2;
-        let lbY = canvas.height / 2 + 125;
+        let lbY = canvas.height / 2 + 150;
 
         ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
         ctx.font = 'bold 14px Segoe UI, sans-serif';
@@ -1277,6 +1387,7 @@ function gameLoop() {
     }
 
     drawParticles();
+    drawScreenFlash();
 
     if (shakeDuration > 0 && shakeIntensity > 0) {
         ctx.restore();
