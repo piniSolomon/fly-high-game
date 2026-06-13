@@ -6,28 +6,28 @@ Continue improving — always making the game better.
 
 ## Tasks
 
-### Completed (v0.1.0 — v1.3.0)
-- [x] All v1.2.0 features (see git history)
-- [x] Achievements system (13 achievements, localStorage persistence, popup notifications)
-- [x] Themed backgrounds (4 themes cycling every 1500m: space/nebula/deep/aurora)
+### Completed (v0.1.0 — v1.4.0)
+- [x] All v1.3.0 features (see git history)
+- [x] Tutorial overlay for first-time players (controls, collectibles, dangers)
+- [x] Collectible coins in obstacle gaps (spinning 3D, 3 bonus points)
 
 ### Next Up
-- [ ] Add a "how to play" tutorial overlay for first-time players
-- [ ] Add collectible coins between obstacles for bonus points
-- [ ] Add particle trail diversity (sparkles, smoke)
-- [ ] Add double-tap to activate a stored power-up
-- [ ] Add animated stars (spinning, bobbing)
-- [ ] Add sound volume control
-- [ ] Add smooth theme transitions (lerp between colors)
-- [ ] Add achievement gallery screen
+- [ ] Add particle trail diversity (sparkles when collecting, smoke on damage)
+- [ ] Add animated stars (gentle bobbing motion)
+- [ ] Add sound volume control (+ / - keys)
+- [ ] Add smooth theme transitions (lerp between background colors)
+- [ ] Add achievement gallery screen (press Tab to view all achievements)
+- [ ] Add daily challenge mode (fixed seed, compete for best score)
+- [ ] Add screen edge bounce option (instead of death on top/bottom)
+- [ ] Add cloud/nebula parallax layer for visual depth
 
 ## Status
 
-v1.3.0 — 58 E2E tests. Achievements and themed backgrounds.
+v1.4.0 — 64 E2E tests. Tutorial, coins, achievements, themes.
 
 ## Learnings
 
-- Achievements need both check-on-tick and check-on-death to avoid missing edge cases
-- Themed backgrounds cycling with distance creates a sense of journey/progression
-- Achievement popup with a rounded pill background reads better than floating text
-- sessionPowerupsUsed as a Set cleanly tracks unique power-up types collected
+- Tutorial must be gated properly — existing tests break if it intercepts clicks
+- startGame helper needs to skip tutorial for deterministic testing
+- Coins in obstacle gaps reward precision and risk-taking
+- Spinning coin via cosine X-scale creates convincing 3D rotation
