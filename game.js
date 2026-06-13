@@ -3,7 +3,7 @@
 // A side-scrolling browser game where you fly and collect stars
 // ============================================
 
-const GAME_VERSION = '2.0.0';
+const GAME_VERSION = '2.1.0';
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -646,6 +646,58 @@ setupMobileButton('btn-down', 'ArrowDown');
 setupMobileButton('btn-left', 'ArrowLeft');
 setupMobileButton('btn-right', 'ArrowRight');
 
+// --- Gamepad support ---
+var gamepadConnected = false;
+const GAMEPAD_DEADZONE = 0.3;
+
+function pollGamepad() {
+    const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+    let gp = null;
+    for (const pad of gamepads) {
+        if (pad && pad.connected) { gp = pad; break; }
+    }
+    if (!gp) {
+        gamepadConnected = false;
+        return;
+    }
+    gamepadConnected = true;
+
+    // Left stick
+    const lx = gp.axes[0] || 0;
+    const ly = gp.axes[1] || 0;
+    keys['GamepadLeft'] = lx < -GAMEPAD_DEADZONE;
+    keys['GamepadRight'] = lx > GAMEPAD_DEADZONE;
+    keys['GamepadUp'] = ly < -GAMEPAD_DEADZONE;
+    keys['GamepadDown'] = ly > GAMEPAD_DEADZONE;
+
+    // Buttons: A (0) = thrust, B (1) = down, Start (9) = pause
+    keys['GamepadA'] = gp.buttons[0] && gp.buttons[0].pressed;
+    keys['GamepadB'] = gp.buttons[1] && gp.buttons[1].pressed;
+
+    // Start/pause
+    if (gp.buttons[9] && gp.buttons[9].pressed) {
+        if (!keys['GamepadStartHeld']) {
+            keys['GamepadStartHeld'] = true;
+            if (state === 'playing') {
+                paused = !paused;
+                if (paused) {
+                    showMessage('PAUSED<br><span class="sub">Press Start to resume</span>');
+                } else {
+                    messageEl.classList.add('hidden');
+                }
+            }
+        }
+    } else {
+        keys['GamepadStartHeld'] = false;
+    }
+
+    // A button to start/restart game
+    if (keys['GamepadA'] && (state === 'start' || state === 'dead')) {
+        initAudio();
+        startGame();
+    }
+}
+
 // --- Stars (scrolling collectibles) ---
 var stars = [];
 
@@ -874,6 +926,7 @@ var frameCount = 0;
 
 function update() {
     frameCount++;
+    pollGamepad();
 
     if (state !== 'playing') return;
     if (paused) return;
@@ -899,8 +952,8 @@ function update() {
     }
 
     // --- Vertical movement ---
-    const movingUp = keys['Space'] || keys['ArrowUp'] || keys['KeyW'] || keys['Mouse'];
-    const movingDown = keys['ArrowDown'] || keys['KeyS'];
+    const movingUp = keys['Space'] || keys['ArrowUp'] || keys['KeyW'] || keys['Mouse'] || keys['GamepadA'] || keys['GamepadUp'];
+    const movingDown = keys['ArrowDown'] || keys['KeyS'] || keys['GamepadB'] || keys['GamepadDown'];
     isThrusting = movingUp;
 
     if (movingUp) {
@@ -920,8 +973,8 @@ function update() {
     player.y += player.vy;
 
     // --- Horizontal movement ---
-    const movingRight = keys['ArrowRight'] || keys['KeyD'];
-    const movingLeft = keys['ArrowLeft'] || keys['KeyA'];
+    const movingRight = keys['ArrowRight'] || keys['KeyD'] || keys['GamepadRight'];
+    const movingLeft = keys['ArrowLeft'] || keys['KeyA'] || keys['GamepadLeft'];
 
     if (movingRight) {
         player.vx += HORIZONTAL_ACCEL;
@@ -2087,6 +2140,13 @@ function drawStartScreen() {
     ctx.fillStyle = 'rgba(255, 215, 0, 0.35)';
     ctx.font = '13px Segoe UI, sans-serif';
     ctx.fillText('Tab = Achievements  |  I = Stats  |  Z = Zen', canvas.width / 2, canvas.height / 2 + 92);
+
+    // Gamepad indicator
+    if (gamepadConnected) {
+        ctx.fillStyle = 'rgba(68, 255, 136, 0.5)';
+        ctx.font = '13px Segoe UI, sans-serif';
+        ctx.fillText('🎮 Gamepad Connected', canvas.width / 2, canvas.height / 2 + 112);
+    }
 
     // Zen mode indicator
     if (zenMode) {

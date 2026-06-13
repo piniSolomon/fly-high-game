@@ -521,12 +521,12 @@ test('favicon is linked in HTML', async ({ page }) => {
 // ============================================
 // Test: Version is updated to 0.5.0
 // ============================================
-test('game version is 2.0.0', async ({ page }) => {
+test('game version is 2.1.0', async ({ page }) => {
     await page.goto('/index.html');
     await page.waitForTimeout(300);
 
     const version = await page.evaluate(() => GAME_VERSION);
-    expect(version).toBe('2.0.0');
+    expect(version).toBe('2.1.0');
 });
 
 // ============================================
@@ -1798,4 +1798,45 @@ test('nebula clouds are initialized with properties', async ({ page }) => {
     expect(info.hasHue).toBe(true);
     expect(info.hasAlpha).toBe(true);
     expect(info.hasDrift).toBe(true);
+});
+
+// ============================================
+// Test: Gamepad polling function exists
+// ============================================
+test('pollGamepad function is defined', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    const exists = await page.evaluate(() => typeof pollGamepad === 'function');
+    expect(exists).toBe(true);
+});
+
+// ============================================
+// Test: Gamepad keys integrate into movement
+// ============================================
+test('gamepad keys are checked in movement logic', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    await startGame(page);
+    await page.waitForTimeout(100);
+
+    // Simulate gamepad input via keys
+    await page.evaluate(() => {
+        keys['GamepadRight'] = true;
+        keys['GamepadA'] = true;
+    });
+    await page.waitForTimeout(300);
+
+    const s = await page.evaluate(() => state);
+    if (s === 'playing') {
+        const vx = await page.evaluate(() => player.vx);
+        // Should have moved right due to GamepadRight
+        expect(vx).toBeGreaterThan(0);
+    }
+
+    await page.evaluate(() => {
+        keys['GamepadRight'] = false;
+        keys['GamepadA'] = false;
+    });
 });
