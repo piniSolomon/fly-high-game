@@ -3,7 +3,7 @@
 // A side-scrolling browser game where you fly and collect stars
 // ============================================
 
-const GAME_VERSION = '1.4.0';
+const GAME_VERSION = '1.5.0';
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -573,7 +573,7 @@ function spawnObstacle() {
 // --- Particles ---
 var particles = [];
 
-function emitParticles(x, y, color, count) {
+function emitParticles(x, y, color, count, type) {
     for (let i = 0; i < count; i++) {
         const angle = Math.random() * Math.PI * 2;
         const speed = Math.random() * 3 + 1;
@@ -584,7 +584,29 @@ function emitParticles(x, y, color, count) {
             life: 1.0,
             decay: Math.random() * 0.03 + 0.02,
             size: Math.random() * 4 + 2,
-            color
+            color,
+            type: type || 'circle' // 'circle', 'sparkle', 'smoke'
+        });
+    }
+}
+
+function emitSparkles(x, y, color, count) {
+    emitParticles(x, y, color, count, 'sparkle');
+}
+
+function emitSmoke(x, y, count) {
+    for (let i = 0; i < count; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = Math.random() * 1.5 + 0.3;
+        particles.push({
+            x, y,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed - 0.5,
+            life: 1.0,
+            decay: Math.random() * 0.015 + 0.008,
+            size: Math.random() * 6 + 4,
+            color: 'rgba(150, 150, 150, 0.5)',
+            type: 'smoke'
         });
     }
 }
@@ -667,6 +689,7 @@ function die() {
     saveToLeaderboard(score);
     checkAchievements();
     emitParticles(player.x, player.y, '#ff4444', 30);
+    emitSmoke(player.x, player.y, 8);
     playDeathSound();
     shakeIntensity = 12;
     shakeDuration = 20;
@@ -829,7 +852,7 @@ function update() {
             score += points;
             scoreEl.textContent = `Score: ${score}`;
             const particleColor = star.color === 'rainbow' ? '#ff44ff' : (star.color || '#ffd700');
-            emitParticles(star.x, star.y, particleColor, 12);
+            emitSparkles(star.x, star.y, particleColor, 12);
             playCollectSound();
             starsCollected++;
             if (star.starType === 'rainbow') sessionCollectedRainbow = true;
@@ -1376,7 +1399,9 @@ function drawStar(x, y, size, pulse, color) {
 function drawStars() {
     for (const star of stars) {
         if (!star.collected) {
-            drawStar(star.x, star.y, star.size, star.pulse, star.color);
+            // Gentle bobbing motion
+            const bobY = Math.sin(frameCount * 0.03 + star.pulse * 2) * 3;
+            drawStar(star.x, star.y + bobY, star.size, star.pulse, star.color);
         }
     }
 }
@@ -1548,9 +1573,36 @@ function drawParticles() {
     for (const p of particles) {
         ctx.globalAlpha = p.life;
         ctx.fillStyle = p.color;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
-        ctx.fill();
+
+        if (p.type === 'sparkle') {
+            // Four-pointed star sparkle
+            const s = p.size * p.life;
+            ctx.save();
+            ctx.translate(p.x, p.y);
+            ctx.rotate(p.life * 3); // spin as it fades
+            ctx.beginPath();
+            for (let i = 0; i < 4; i++) {
+                const angle = (i * Math.PI) / 2;
+                ctx.lineTo(Math.cos(angle) * s, Math.sin(angle) * s);
+                const midAngle = angle + Math.PI / 4;
+                ctx.lineTo(Math.cos(midAngle) * s * 0.3, Math.sin(midAngle) * s * 0.3);
+            }
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+        } else if (p.type === 'smoke') {
+            // Soft expanding smoke puff
+            const s = p.size * (2 - p.life); // grows as it fades
+            ctx.globalAlpha = p.life * 0.4;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, s, 0, Math.PI * 2);
+            ctx.fill();
+        } else {
+            // Default circle
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+            ctx.fill();
+        }
     }
     ctx.globalAlpha = 1;
 }

@@ -521,12 +521,12 @@ test('favicon is linked in HTML', async ({ page }) => {
 // ============================================
 // Test: Version is updated to 0.5.0
 // ============================================
-test('game version is 1.4.0', async ({ page }) => {
+test('game version is 1.5.0', async ({ page }) => {
     await page.goto('/index.html');
     await page.waitForTimeout(300);
 
     const version = await page.evaluate(() => GAME_VERSION);
-    expect(version).toBe('1.4.0');
+    expect(version).toBe('1.5.0');
 });
 
 // ============================================
@@ -1469,4 +1469,54 @@ test('drawTutorial function is defined', async ({ page }) => {
 
     const exists = await page.evaluate(() => typeof drawTutorial === 'function');
     expect(exists).toBe(true);
+});
+
+// ============================================
+// Test: Sparkle and smoke particle functions exist
+// ============================================
+test('emitSparkles and emitSmoke functions exist', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    const fns = await page.evaluate(() => ({
+        sparkles: typeof emitSparkles === 'function',
+        smoke: typeof emitSmoke === 'function',
+    }));
+
+    expect(fns.sparkles).toBe(true);
+    expect(fns.smoke).toBe(true);
+});
+
+// ============================================
+// Test: Sparkle particles have correct type
+// ============================================
+test('sparkle particles have sparkle type', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    await page.evaluate(() => {
+        particles.length = 0;
+        emitSparkles(100, 100, '#ffd700', 5);
+    });
+
+    const types = await page.evaluate(() => particles.map(p => p.type));
+    expect(types.length).toBe(5);
+    expect(types.every(t => t === 'sparkle')).toBe(true);
+});
+
+// ============================================
+// Test: Smoke particles have smoke type
+// ============================================
+test('smoke particles have smoke type', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    await page.evaluate(() => {
+        particles.length = 0;
+        emitSmoke(100, 100, 3);
+    });
+
+    const types = await page.evaluate(() => particles.map(p => p.type));
+    expect(types.length).toBe(3);
+    expect(types.every(t => t === 'smoke')).toBe(true);
 });
