@@ -3,7 +3,7 @@
 // A side-scrolling browser game where you fly and collect stars
 // ============================================
 
-const GAME_VERSION = '1.8.0';
+const GAME_VERSION = '1.9.0';
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -432,6 +432,7 @@ function getThemeForDistance() {
 
 // --- Game State (var for test access via window) ---
 var state = 'start'; // 'start', 'playing', 'dead'
+var zenMode = false; // no obstacles, no death on boundaries — just fly and collect
 var score = 0;
 var distance = 0;
 var scrollSpeed = BASE_SCROLL_SPEED;
@@ -544,6 +545,11 @@ window.addEventListener('keydown', (e) => {
             showingAchievements = false;
             showingStats = !showingStats;
         }
+        return;
+    }
+    // Zen mode toggle
+    if (e.code === 'KeyZ' && (state === 'start' || state === 'dead')) {
+        zenMode = !zenMode;
         return;
     }
     // Pause toggle
@@ -674,9 +680,16 @@ function spawnObstacle() {
         moveSpeed: moveSpeed,
         moveRange: moveRange,
         movePhase: Math.random() * Math.PI * 2,
-        color: isMoving
-            ? `hsl(${340 + Math.random() * 30}, 40%, ${18 + Math.random() * 8}%)`
-            : `hsl(${200 + Math.random() * 40}, 30%, ${15 + Math.random() * 10}%)`
+        color: (function() {
+            // Progressive coloring — obstacles get darker and more menacing with distance
+            const darkening = Math.min(distance / 6000, 0.5); // max 50% darker
+            const baseLightness = 15 + Math.random() * 10;
+            const lightness = baseLightness * (1 - darkening);
+            if (isMoving) {
+                return `hsl(${340 + Math.random() * 30}, ${40 + darkening * 20}%, ${lightness}%)`;
+            }
+            return `hsl(${200 + Math.random() * 40}, ${30 + darkening * 15}%, ${lightness}%)`;
+        })()
     });
 }
 
@@ -932,10 +945,17 @@ function update() {
         playThrustSound();
     }
 
-    // Boundaries — die if hit top or bottom
-    if (player.y - PLAYER_SIZE < 0 || player.y + PLAYER_SIZE > canvas.height) {
-        die();
-        return;
+    // Boundaries
+    if (zenMode) {
+        // Zen mode: wrap around instead of dying
+        if (player.y < -PLAYER_SIZE) player.y = canvas.height + PLAYER_SIZE;
+        if (player.y > canvas.height + PLAYER_SIZE) player.y = -PLAYER_SIZE;
+    } else {
+        // Normal mode: die if hit top or bottom
+        if (player.y - PLAYER_SIZE < 0 || player.y + PLAYER_SIZE > canvas.height) {
+            die();
+            return;
+        }
     }
 
     // --- Scroll stars ---
@@ -1035,29 +1055,31 @@ function update() {
         }
     }
 
-    // Spawn new obstacles
-    nextObstacleIn--;
-    if (nextObstacleIn <= 0) {
-        spawnObstacle();
-        // Spawn coin in the obstacle gap (50% chance)
-        const lastObs = obstacles[obstacles.length - 1];
-        if (lastObs && Math.random() < 0.5) {
-            coins.push({
-                x: lastObs.x + lastObs.width / 2,
-                y: lastObs.gapY + lastObs.gapHeight / 2,
-                size: COIN_SIZE,
-                spin: Math.random() * Math.PI * 2,
-                collected: false
-            });
+    // Spawn new obstacles (skip in zen mode)
+    if (!zenMode) {
+        nextObstacleIn--;
+        if (nextObstacleIn <= 0) {
+            spawnObstacle();
+            // Spawn coin in the obstacle gap (50% chance)
+            const lastObs = obstacles[obstacles.length - 1];
+            if (lastObs && Math.random() < 0.5) {
+                coins.push({
+                    x: lastObs.x + lastObs.width / 2,
+                    y: lastObs.gapY + lastObs.gapHeight / 2,
+                    size: COIN_SIZE,
+                    spin: Math.random() * Math.PI * 2,
+                    collected: false
+                });
+            }
+            nextObstacleIn = OBSTACLE_SPAWN_INTERVAL_MIN +
+                Math.random() * (OBSTACLE_SPAWN_INTERVAL_MAX - OBSTACLE_SPAWN_INTERVAL_MIN);
+            nextObstacleIn = Math.max(60, nextObstacleIn * (BASE_SCROLL_SPEED / effectiveSpeed));
         }
-        nextObstacleIn = OBSTACLE_SPAWN_INTERVAL_MIN +
-            Math.random() * (OBSTACLE_SPAWN_INTERVAL_MAX - OBSTACLE_SPAWN_INTERVAL_MIN);
-        nextObstacleIn = Math.max(60, nextObstacleIn * (BASE_SCROLL_SPEED / effectiveSpeed));
     }
 
-    // Obstacle collision (skip during invincibility or shield)
+    // Obstacle collision (skip in zen mode, during invincibility, or shield)
     const hasShield = activePowerup && activePowerup.type === 'shield';
-    if (player.invincibleFrames <= 0 && !hasShield) {
+    if (!zenMode && player.invincibleFrames <= 0 && !hasShield) {
         for (const obs of obstacles) {
             const topPillar = { x: obs.x, y: 0, w: obs.width, h: obs.gapY };
             const bottomPillar = {
@@ -1764,6 +1786,12 @@ function drawHUD() {
     const volPct = Math.round(masterVolume * 100);
     ctx.fillText(musicPlaying ? `♪ ${volPct}%` : '♪ off', canvas.width - 20, 92);
 
+    // Zen mode label
+    if (zenMode) {
+        ctx.fillStyle = 'rgba(68, 255, 136, 0.5)';
+        ctx.fillText('ZEN', canvas.width - 20, 108);
+    }
+
     ctx.textAlign = 'left';
 }
 
@@ -2016,7 +2044,14 @@ function drawStartScreen() {
     // Achievement gallery hint
     ctx.fillStyle = 'rgba(255, 215, 0, 0.35)';
     ctx.font = '13px Segoe UI, sans-serif';
-    ctx.fillText('Tab = Achievements  |  I = Stats', canvas.width / 2, canvas.height / 2 + 92);
+    ctx.fillText('Tab = Achievements  |  I = Stats  |  Z = Zen', canvas.width / 2, canvas.height / 2 + 92);
+
+    // Zen mode indicator
+    if (zenMode) {
+        ctx.fillStyle = '#44ff88';
+        ctx.font = 'bold 16px Segoe UI, sans-serif';
+        ctx.fillText('ZEN MODE ON', canvas.width / 2, canvas.height / 2 + 115);
+    }
 
     if (highScore > 0) {
         ctx.fillStyle = '#ffd700';
