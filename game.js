@@ -3,7 +3,7 @@
 // A side-scrolling browser game where you fly and collect stars
 // ============================================
 
-const GAME_VERSION = '1.7.0';
+const GAME_VERSION = '1.8.0';
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -20,6 +20,22 @@ var masterGainNode = null;
 const SETTINGS_KEY = 'flyHighSettings';
 var savedSettings = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
 var musicAutoStart = savedSettings.musicOn !== false; // default true
+
+// Lifetime stats
+const STATS_KEY = 'flyHighStats';
+var lifetimeStats = JSON.parse(localStorage.getItem(STATS_KEY) || '{}');
+lifetimeStats.gamesPlayed = lifetimeStats.gamesPlayed || 0;
+lifetimeStats.totalStars = lifetimeStats.totalStars || 0;
+lifetimeStats.totalDistance = lifetimeStats.totalDistance || 0;
+lifetimeStats.totalScore = lifetimeStats.totalScore || 0;
+lifetimeStats.totalDeaths = lifetimeStats.totalDeaths || 0;
+lifetimeStats.timePlayed = lifetimeStats.timePlayed || 0; // seconds
+var showingStats = false;
+var sessionStartTime = 0;
+
+function saveStats() {
+    localStorage.setItem(STATS_KEY, JSON.stringify(lifetimeStats));
+}
 
 function initAudio() {
     if (audioCtx) return;
@@ -372,10 +388,46 @@ const THEMES = [
     { name: 'aurora',  gradTop: '#0a1a2e', gradMid: '#102a3e', gradBot: '#081828', starColor: '#aaffcc', nearColor: '#66ddaa' },
 ];
 
+function hexToRgb(hex) {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return [r, g, b];
+}
+
+function rgbToHex(r, g, b) {
+    return '#' + [r, g, b].map(c => Math.round(Math.max(0, Math.min(255, c))).toString(16).padStart(2, '0')).join('');
+}
+
+function lerpColor(hex1, hex2, t) {
+    const [r1, g1, b1] = hexToRgb(hex1);
+    const [r2, g2, b2] = hexToRgb(hex2);
+    return rgbToHex(r1 + (r2 - r1) * t, g1 + (g2 - g1) * t, b1 + (b2 - b1) * t);
+}
+
 function getThemeForDistance() {
-    // Theme changes every 1500m
-    const idx = Math.floor(distance / 1500) % THEMES.length;
-    return THEMES[idx];
+    const themeLen = 1500;
+    const pos = distance / themeLen;
+    const idx = Math.floor(pos) % THEMES.length;
+    const nextIdx = (idx + 1) % THEMES.length;
+    const t = pos - Math.floor(pos); // 0-1 progress within current theme
+
+    // Smooth transition in the last 20% of each theme zone
+    const transitionStart = 0.8;
+    if (t < transitionStart) return THEMES[idx];
+
+    const blendT = (t - transitionStart) / (1 - transitionStart); // 0-1 in transition zone
+    const curr = THEMES[idx];
+    const next = THEMES[nextIdx];
+
+    return {
+        name: curr.name + '>' + next.name,
+        gradTop: lerpColor(curr.gradTop, next.gradTop, blendT),
+        gradMid: lerpColor(curr.gradMid, next.gradMid, blendT),
+        gradBot: lerpColor(curr.gradBot, next.gradBot, blendT),
+        starColor: lerpColor(curr.starColor, next.starColor, blendT),
+        nearColor: lerpColor(curr.nearColor, next.nearColor, blendT),
+    };
 }
 
 // --- Game State (var for test access via window) ---
@@ -460,7 +512,7 @@ var isThrusting = false;
 window.addEventListener('keydown', (e) => {
     keys[e.code] = true;
     if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
-         'KeyW', 'KeyA', 'KeyS', 'KeyD', 'Escape', 'KeyM'].includes(e.code)) {
+         'KeyW', 'KeyA', 'KeyS', 'KeyD', 'Escape', 'KeyM', 'KeyI'].includes(e.code)) {
         e.preventDefault();
     }
     // Music toggle
@@ -481,7 +533,16 @@ window.addEventListener('keydown', (e) => {
     if (e.code === 'Tab') {
         e.preventDefault();
         if (state === 'start') {
+            showingStats = false;
             showingAchievements = !showingAchievements;
+        }
+        return;
+    }
+    // Stats screen toggle
+    if (e.code === 'KeyI') {
+        if (state === 'start') {
+            showingAchievements = false;
+            showingStats = !showingStats;
         }
         return;
     }
@@ -704,6 +765,8 @@ function startGame() {
     sessionMaxCombo = 0;
     achievementPopup = null;
     coins = [];
+    sessionStartTime = Date.now();
+    lifetimeStats.gamesPlayed++;
     playStartSound();
     if (!musicPlaying && musicAutoStart) startMusic();
 
@@ -737,6 +800,15 @@ function die() {
     }
     saveToLeaderboard(score);
     checkAchievements();
+    // Update lifetime stats
+    lifetimeStats.totalStars += starsCollected;
+    lifetimeStats.totalDistance += distance;
+    lifetimeStats.totalScore += score;
+    lifetimeStats.totalDeaths++;
+    if (sessionStartTime > 0) {
+        lifetimeStats.timePlayed += (Date.now() - sessionStartTime) / 1000;
+    }
+    saveStats();
     emitParticles(player.x, player.y, '#ff4444', 30);
     emitSmoke(player.x, player.y, 8);
     playDeathSound();
@@ -1731,6 +1803,68 @@ function drawScreenFlash() {
     ctx.globalAlpha = 1;
 }
 
+function formatTime(seconds) {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = Math.floor(seconds % 60);
+    if (h > 0) return `${h}h ${m}m ${s}s`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
+}
+
+function drawStatsScreen() {
+    const cx = canvas.width / 2;
+
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.textAlign = 'center';
+
+    ctx.fillStyle = '#44ddff';
+    ctx.font = 'bold 32px Segoe UI, sans-serif';
+    ctx.fillText('LIFETIME STATS', cx, 50);
+
+    const stats = [
+        ['Games Played', lifetimeStats.gamesPlayed.toLocaleString()],
+        ['Total Stars', lifetimeStats.totalStars.toLocaleString()],
+        ['Total Score', lifetimeStats.totalScore.toLocaleString()],
+        ['Total Distance', Math.floor(lifetimeStats.totalDistance).toLocaleString() + 'm'],
+        ['Total Deaths', lifetimeStats.totalDeaths.toLocaleString()],
+        ['Time Played', formatTime(lifetimeStats.timePlayed)],
+        ['Best Score', highScore.toLocaleString()],
+        ['Best Distance', Math.floor(bestDistance).toLocaleString() + 'm'],
+        ['Achievements', `${unlockedAchievements.length} / ${ACHIEVEMENT_DEFS.length}`],
+        ['Avg Score/Game', lifetimeStats.gamesPlayed > 0
+            ? Math.round(lifetimeStats.totalScore / lifetimeStats.gamesPlayed).toLocaleString()
+            : '—'],
+    ];
+
+    let y = 100;
+    for (const [label, value] of stats) {
+        // Row background
+        ctx.fillStyle = y % 72 < 36 ? 'rgba(68, 221, 255, 0.05)' : 'transparent';
+        ctx.fillRect(cx - 160, y - 12, 320, 30);
+
+        ctx.textAlign = 'left';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+        ctx.font = '14px Segoe UI, sans-serif';
+        ctx.fillText(label, cx - 140, y + 5);
+
+        ctx.textAlign = 'right';
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 14px Segoe UI, sans-serif';
+        ctx.fillText(value, cx + 140, y + 5);
+
+        y += 32;
+    }
+
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#666688';
+    ctx.font = '14px Segoe UI, sans-serif';
+    ctx.fillText('Press I to go back', cx, canvas.height - 30);
+    ctx.textAlign = 'left';
+}
+
 function drawAchievementGallery() {
     const cx = canvas.width / 2;
 
@@ -1882,7 +2016,7 @@ function drawStartScreen() {
     // Achievement gallery hint
     ctx.fillStyle = 'rgba(255, 215, 0, 0.35)';
     ctx.font = '13px Segoe UI, sans-serif';
-    ctx.fillText('Press Tab for Achievements', canvas.width / 2, canvas.height / 2 + 92);
+    ctx.fillText('Tab = Achievements  |  I = Stats', canvas.width / 2, canvas.height / 2 + 92);
 
     if (highScore > 0) {
         ctx.fillStyle = '#ffd700';
@@ -2045,6 +2179,8 @@ function gameLoop() {
             drawTutorial();
         } else if (showingAchievements) {
             drawAchievementGallery();
+        } else if (showingStats) {
+            drawStatsScreen();
         } else {
             drawStartScreen();
         }

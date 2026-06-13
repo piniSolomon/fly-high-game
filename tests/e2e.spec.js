@@ -521,12 +521,12 @@ test('favicon is linked in HTML', async ({ page }) => {
 // ============================================
 // Test: Version is updated to 0.5.0
 // ============================================
-test('game version is 1.7.0', async ({ page }) => {
+test('game version is 1.8.0', async ({ page }) => {
     await page.goto('/index.html');
     await page.waitForTimeout(300);
 
     const version = await page.evaluate(() => GAME_VERSION);
-    expect(version).toBe('1.7.0');
+    expect(version).toBe('1.8.0');
 });
 
 // ============================================
@@ -1613,4 +1613,90 @@ test('saveSettings function is defined', async ({ page }) => {
 
     const exists = await page.evaluate(() => typeof saveSettings === 'function');
     expect(exists).toBe(true);
+});
+
+// ============================================
+// Test: Lifetime stats track games played
+// ============================================
+test('lifetime stats increment on game start and death', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    // Reset stats
+    await page.evaluate(() => {
+        localStorage.removeItem('flyHighStats');
+        lifetimeStats = { gamesPlayed: 0, totalStars: 0, totalDistance: 0, totalScore: 0, totalDeaths: 0, timePlayed: 0 };
+    });
+
+    await startGame(page);
+    await page.waitForTimeout(100);
+
+    const gamesPlayed = await page.evaluate(() => lifetimeStats.gamesPlayed);
+    expect(gamesPlayed).toBe(1);
+
+    // Die
+    await page.evaluate(() => { player.y = -100; });
+    await page.waitForTimeout(200);
+
+    const deaths = await page.evaluate(() => lifetimeStats.totalDeaths);
+    expect(deaths).toBe(1);
+
+    // Verify saved to localStorage
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('flyHighStats') || '{}'));
+    expect(stored.totalDeaths).toBe(1);
+});
+
+// ============================================
+// Test: Stats screen draw function exists
+// ============================================
+test('drawStatsScreen function is defined', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    const exists = await page.evaluate(() => typeof drawStatsScreen === 'function');
+    expect(exists).toBe(true);
+});
+
+// ============================================
+// Test: Theme transition lerps colors
+// ============================================
+test('lerpColor blends between two hex colors', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    const result = await page.evaluate(() => {
+        const black = '#000000';
+        const white = '#ffffff';
+        const mid = lerpColor(black, white, 0.5);
+        return mid;
+    });
+
+    // Midpoint should be roughly #808080
+    expect(result).toBe('#808080');
+});
+
+// ============================================
+// Test: Theme smoothly transitions between zones
+// ============================================
+test('theme transitions smoothly in last 20% of zone', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    const themes = await page.evaluate(() => {
+        // At 50% through first zone (750m) = well before transition
+        distance = 750;
+        const t1 = getThemeForDistance();
+        // At 95% through first zone (1425m) = deep in transition
+        distance = 1450;
+        const t2 = getThemeForDistance();
+        return {
+            t1Name: t1.name,
+            t2Name: t2.name,
+            t1IsBlend: t1.name.includes('>'),
+            t2IsBlend: t2.name.includes('>'),
+        };
+    });
+
+    expect(themes.t1IsBlend).toBe(false); // pure theme at 50%
+    expect(themes.t2IsBlend).toBe(true); // blending at ~97%
 });
