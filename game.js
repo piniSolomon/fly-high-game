@@ -3,7 +3,7 @@
 // A side-scrolling browser game where you fly and collect stars
 // ============================================
 
-const GAME_VERSION = '1.9.0';
+const GAME_VERSION = '2.0.0';
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -240,10 +240,12 @@ function triggerFlash(color) {
 // --- Background Stars (parallax decoration) ---
 var bgStarsFar = [];
 var bgStarsNear = [];
+var nebulaClouds = [];
 
 function initBgStars() {
     bgStarsFar = [];
     bgStarsNear = [];
+    nebulaClouds = [];
     for (let i = 0; i < 80; i++) {
         bgStarsFar.push({
             x: Math.random() * canvas.width,
@@ -260,6 +262,19 @@ function initBgStars() {
             size: Math.random() * 2.5 + 1,
             brightness: Math.random() * 0.5 + 0.3,
             twinkleSpeed: Math.random() * 0.015 + 0.003
+        });
+    }
+    // Nebula clouds — large soft blobs that drift slowly
+    for (let i = 0; i < 6; i++) {
+        nebulaClouds.push({
+            x: Math.random() * canvas.width * 1.5,
+            y: Math.random() * canvas.height,
+            radius: 80 + Math.random() * 150,
+            hue: Math.random() * 360,
+            alpha: 0.02 + Math.random() * 0.03,
+            driftSpeed: 0.1 + Math.random() * 0.15,
+            wobblePhase: Math.random() * Math.PI * 2,
+            wobbleAmp: 10 + Math.random() * 20,
         });
     }
 }
@@ -1213,6 +1228,16 @@ function update() {
         s.x -= effectiveSpeed * 0.4;
         if (s.x < 0) { s.x = canvas.width; s.y = Math.random() * canvas.height; }
     }
+    // Scroll nebula clouds (slowest parallax layer)
+    for (const cloud of nebulaClouds) {
+        cloud.x -= effectiveSpeed * 0.08;
+        cloud.wobblePhase += 0.005;
+        if (cloud.x + cloud.radius < -50) {
+            cloud.x = canvas.width + cloud.radius + Math.random() * 200;
+            cloud.y = Math.random() * canvas.height;
+            cloud.hue = Math.random() * 360;
+        }
+    }
 
     // Update particles (also scroll them)
     for (let i = particles.length - 1; i >= 0; i--) {
@@ -1291,6 +1316,23 @@ function drawBackground() {
     grad.addColorStop(1, theme.gradBot);
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Nebula clouds (behind everything else)
+    for (const cloud of nebulaClouds) {
+        const wobbleY = Math.sin(cloud.wobblePhase) * cloud.wobbleAmp;
+        const gradient = ctx.createRadialGradient(
+            cloud.x, cloud.y + wobbleY, 0,
+            cloud.x, cloud.y + wobbleY, cloud.radius
+        );
+        gradient.addColorStop(0, `hsla(${cloud.hue}, 60%, 50%, ${cloud.alpha})`);
+        gradient.addColorStop(0.5, `hsla(${cloud.hue}, 40%, 30%, ${cloud.alpha * 0.5})`);
+        gradient.addColorStop(1, 'transparent');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(
+            cloud.x - cloud.radius, cloud.y + wobbleY - cloud.radius,
+            cloud.radius * 2, cloud.radius * 2
+        );
+    }
 
     for (const s of bgStarsFar) {
         const twinkle = Math.sin(frameCount * s.twinkleSpeed) * 0.3 + s.brightness;

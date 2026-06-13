@@ -521,12 +521,12 @@ test('favicon is linked in HTML', async ({ page }) => {
 // ============================================
 // Test: Version is updated to 0.5.0
 // ============================================
-test('game version is 1.9.0', async ({ page }) => {
+test('game version is 2.0.0', async ({ page }) => {
     await page.goto('/index.html');
     await page.waitForTimeout(300);
 
     const version = await page.evaluate(() => GAME_VERSION);
-    expect(version).toBe('1.9.0');
+    expect(version).toBe('2.0.0');
 });
 
 // ============================================
@@ -1776,4 +1776,26 @@ test('zen mode wraps player at screen edges', async ({ page }) => {
     // (it wraps from top to bottom)
 
     await page.evaluate(() => { zenMode = false; });
+});
+
+// ============================================
+// Test: Nebula clouds are initialized
+// ============================================
+test('nebula clouds are initialized with properties', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    const info = await page.evaluate(() => ({
+        count: nebulaClouds.length,
+        hasRadius: nebulaClouds.length > 0 && typeof nebulaClouds[0].radius === 'number',
+        hasHue: nebulaClouds.length > 0 && typeof nebulaClouds[0].hue === 'number',
+        hasAlpha: nebulaClouds.length > 0 && typeof nebulaClouds[0].alpha === 'number',
+        hasDrift: nebulaClouds.length > 0 && typeof nebulaClouds[0].driftSpeed === 'number',
+    }));
+
+    expect(info.count).toBeGreaterThanOrEqual(4);
+    expect(info.hasRadius).toBe(true);
+    expect(info.hasHue).toBe(true);
+    expect(info.hasAlpha).toBe(true);
+    expect(info.hasDrift).toBe(true);
 });
