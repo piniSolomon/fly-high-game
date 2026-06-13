@@ -3,7 +3,7 @@
 // A side-scrolling browser game where you fly and collect stars
 // ============================================
 
-const GAME_VERSION = '0.6.0';
+const GAME_VERSION = '0.7.0';
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -105,6 +105,24 @@ function playStartSound() {
     });
 }
 
+function playPowerupSound() {
+    if (!audioEnabled || !audioCtx) return;
+    const notes = [500, 700, 900, 1100];
+    notes.forEach((freq, i) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        const t = audioCtx.currentTime + i * 0.06;
+        osc.frequency.setValueAtTime(freq, t);
+        gain.gain.setValueAtTime(0.08, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(t);
+        osc.stop(t + 0.12);
+    });
+}
+
 // --- Background Stars (parallax decoration) ---
 var bgStarsFar = [];
 var bgStarsNear = [];
@@ -193,6 +211,21 @@ const COMBO_TIMEOUT = 120; // frames (~2 seconds to keep combo alive)
 const COMBO_THRESHOLDS = [3, 6, 10, 15]; // combo counts for multiplier levels
 var comboPopups = []; // floating text popups
 
+// Power-ups
+var powerups = [];
+var activePowerup = null; // { type, timer }
+const POWERUP_DURATION = 300; // frames (~5 seconds)
+const POWERUP_SPAWN_CHANCE = 0.003; // per frame chance
+const POWERUP_TYPES = [
+    { type: 'shield', color: '#44ddff', icon: 'S', desc: 'Shield — immune to obstacles' },
+    { type: 'magnet', color: '#ff44ff', icon: 'M', desc: 'Magnet — attract nearby stars' },
+    { type: 'slow', color: '#44ff88', icon: 'T', desc: 'Slow-mo — slows scroll speed' },
+];
+const MAGNET_RANGE = 150;
+
+// Pause
+var paused = false;
+
 // --- Player ---
 var player = {
     x: 0,
@@ -220,8 +253,23 @@ var isThrusting = false;
 window.addEventListener('keydown', (e) => {
     keys[e.code] = true;
     if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
-         'KeyW', 'KeyA', 'KeyS', 'KeyD'].includes(e.code)) {
+         'KeyW', 'KeyA', 'KeyS', 'KeyD', 'Escape'].includes(e.code)) {
         e.preventDefault();
+    }
+    // Pause toggle
+    if (e.code === 'Escape' && state === 'playing') {
+        paused = !paused;
+        if (paused) {
+            showMessage('PAUSED<br><span class="sub">Press Escape to resume</span>');
+        } else {
+            messageEl.classList.add('hidden');
+        }
+        return;
+    }
+    if (e.code === 'Escape' && state === 'dead') {
+        // Allow escape to restart too
+        startGame();
+        return;
     }
     if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') {
         if (state === 'start' || state === 'dead') {
@@ -329,6 +377,9 @@ function startGame() {
     comboPopups = [];
     shakeIntensity = 0;
     shakeDuration = 0;
+    powerups = [];
+    activePowerup = null;
+    paused = false;
     playStartSound();
 
     // Spawn initial stars ahead
@@ -385,13 +436,17 @@ function update() {
     frameCount++;
 
     if (state !== 'playing') return;
+    if (paused) return;
 
     // Decrease invincibility
     if (player.invincibleFrames > 0) player.invincibleFrames--;
 
     // Increase scroll speed over time
     scrollSpeed = Math.min(MAX_SCROLL_SPEED, BASE_SCROLL_SPEED + distance * SPEED_INCREASE_RATE);
-    distance += scrollSpeed * 0.1;
+    // Apply slow-mo power-up
+    var effectiveSpeed = (activePowerup && activePowerup.type === 'slow')
+        ? scrollSpeed * 0.5 : scrollSpeed;
+    distance += effectiveSpeed * 0.1;
 
     // --- Vertical movement ---
     const movingUp = keys['Space'] || keys['ArrowUp'] || keys['KeyW'] || keys['Mouse'];
@@ -463,7 +518,7 @@ function update() {
 
     // --- Scroll stars ---
     for (let i = stars.length - 1; i >= 0; i--) {
-        stars[i].x -= scrollSpeed;
+        stars[i].x -= effectiveSpeed;
         if (stars[i].x < -30) {
             stars.splice(i, 1);
         }
@@ -520,7 +575,7 @@ function update() {
 
     // --- Scroll obstacles ---
     for (let i = obstacles.length - 1; i >= 0; i--) {
-        obstacles[i].x -= scrollSpeed;
+        obstacles[i].x -= effectiveSpeed;
 
         // Award point for passing obstacle
         if (!obstacles[i].passed && obstacles[i].x + obstacles[i].width < player.x) {
@@ -539,11 +594,12 @@ function update() {
         spawnObstacle();
         nextObstacleIn = OBSTACLE_SPAWN_INTERVAL_MIN +
             Math.random() * (OBSTACLE_SPAWN_INTERVAL_MAX - OBSTACLE_SPAWN_INTERVAL_MIN);
-        nextObstacleIn = Math.max(60, nextObstacleIn * (BASE_SCROLL_SPEED / scrollSpeed));
+        nextObstacleIn = Math.max(60, nextObstacleIn * (BASE_SCROLL_SPEED / effectiveSpeed));
     }
 
-    // Obstacle collision (skip during invincibility)
-    if (player.invincibleFrames <= 0) {
+    // Obstacle collision (skip during invincibility or shield)
+    const hasShield = activePowerup && activePowerup.type === 'shield';
+    if (player.invincibleFrames <= 0 && !hasShield) {
         for (const obs of obstacles) {
             const topPillar = { x: obs.x, y: 0, w: obs.width, h: obs.gapY };
             const bottomPillar = {
@@ -565,20 +621,88 @@ function update() {
         }
     }
 
+    // --- Power-ups ---
+    // Spawn power-ups randomly
+    if (Math.random() < POWERUP_SPAWN_CHANCE && powerups.length < 2) {
+        const typeInfo = POWERUP_TYPES[Math.floor(Math.random() * POWERUP_TYPES.length)];
+        const margin = 80;
+        powerups.push({
+            x: canvas.width + 20,
+            y: margin + Math.random() * (canvas.height - margin * 2),
+            type: typeInfo.type,
+            color: typeInfo.color,
+            icon: typeInfo.icon,
+            size: 18,
+            pulse: Math.random() * Math.PI * 2,
+            collected: false
+        });
+    }
+
+    // Scroll and collect power-ups
+    for (let i = powerups.length - 1; i >= 0; i--) {
+        powerups[i].x -= effectiveSpeed;
+        if (powerups[i].x < -30) {
+            powerups.splice(i, 1);
+            continue;
+        }
+
+        if (powerups[i].collected) continue;
+
+        const dx = player.x - powerups[i].x;
+        const dy = player.y - powerups[i].y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < PLAYER_SIZE + powerups[i].size) {
+            powerups[i].collected = true;
+            activePowerup = { type: powerups[i].type, timer: POWERUP_DURATION };
+            emitParticles(powerups[i].x, powerups[i].y, powerups[i].color, 15);
+            playPowerupSound();
+            comboPopups.push({
+                x: powerups[i].x,
+                y: powerups[i].y - 15,
+                text: powerups[i].icon === 'S' ? 'SHIELD!' : powerups[i].icon === 'M' ? 'MAGNET!' : 'SLOW-MO!',
+                life: 1.0,
+                vy: -1.5
+            });
+        }
+    }
+
+    // Active power-up timer
+    if (activePowerup) {
+        activePowerup.timer--;
+        if (activePowerup.timer <= 0) {
+            activePowerup = null;
+        }
+    }
+
+    // Magnet effect — attract nearby stars
+    if (activePowerup && activePowerup.type === 'magnet') {
+        for (const star of stars) {
+            if (star.collected) continue;
+            const dx = player.x - star.x;
+            const dy = player.y - star.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < MAGNET_RANGE) {
+                const pull = 0.08 * (1 - dist / MAGNET_RANGE);
+                star.x += dx * pull;
+                star.y += dy * pull;
+            }
+        }
+    }
+
     // --- Scroll bg stars (parallax) ---
     for (const s of bgStarsFar) {
-        s.x -= scrollSpeed * 0.15;
+        s.x -= effectiveSpeed * 0.15;
         if (s.x < 0) { s.x = canvas.width; s.y = Math.random() * canvas.height; }
     }
     for (const s of bgStarsNear) {
-        s.x -= scrollSpeed * 0.4;
+        s.x -= effectiveSpeed * 0.4;
         if (s.x < 0) { s.x = canvas.width; s.y = Math.random() * canvas.height; }
     }
 
     // Update particles (also scroll them)
     for (let i = particles.length - 1; i >= 0; i--) {
         const p = particles[i];
-        p.x += p.vx - scrollSpeed * 0.3;
+        p.x += p.vx - effectiveSpeed * 0.3;
         p.y += p.vy;
         p.life -= p.decay;
         if (p.life <= 0) {
@@ -782,6 +906,92 @@ function drawStars() {
     }
 }
 
+function drawPowerups() {
+    for (const pu of powerups) {
+        if (pu.collected) continue;
+
+        const pulseFactor = 1 + Math.sin(frameCount * 0.06 + pu.pulse) * 0.15;
+        const s = pu.size * pulseFactor;
+
+        ctx.save();
+        ctx.translate(pu.x, pu.y);
+
+        // Outer glow
+        ctx.shadowColor = pu.color;
+        ctx.shadowBlur = 25;
+
+        // Hexagon shape
+        ctx.fillStyle = pu.color;
+        ctx.globalAlpha = 0.8;
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+            const angle = (i * Math.PI * 2) / 6 - Math.PI / 6;
+            const px = Math.cos(angle) * s;
+            const py = Math.sin(angle) * s;
+            if (i === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.fill();
+
+        // Inner fill
+        ctx.fillStyle = '#ffffff';
+        ctx.globalAlpha = 0.9;
+        ctx.font = `bold ${Math.floor(s * 0.9)}px Segoe UI, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(pu.icon, 0, 1);
+
+        ctx.shadowBlur = 0;
+        ctx.globalAlpha = 1;
+        ctx.restore();
+    }
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+}
+
+function drawActivePowerupHUD() {
+    if (!activePowerup || state !== 'playing') return;
+
+    const info = POWERUP_TYPES.find(t => t.type === activePowerup.type);
+    if (!info) return;
+
+    const barWidth = 120;
+    const barHeight = 6;
+    const barX = canvas.width - barWidth - 20;
+    const barY = 70;
+    const fillRatio = activePowerup.timer / POWERUP_DURATION;
+
+    // Label
+    ctx.fillStyle = info.color;
+    ctx.font = 'bold 14px Segoe UI, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(info.type.toUpperCase(), canvas.width - 20, barY - 6);
+
+    // Background bar
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+    ctx.fillRect(barX, barY, barWidth, barHeight);
+
+    // Fill bar
+    ctx.fillStyle = info.color;
+    ctx.globalAlpha = 0.8;
+    ctx.fillRect(barX, barY, barWidth * fillRatio, barHeight);
+    ctx.globalAlpha = 1;
+
+    // Shield visual on player
+    if (activePowerup.type === 'shield') {
+        ctx.strokeStyle = info.color;
+        ctx.lineWidth = 2;
+        ctx.globalAlpha = 0.4 + Math.sin(frameCount * 0.1) * 0.2;
+        ctx.beginPath();
+        ctx.arc(player.x, player.y, PLAYER_SIZE * 1.5, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+    }
+
+    ctx.textAlign = 'left';
+}
+
 function drawParticles() {
     for (const p of particles) {
         ctx.globalAlpha = p.life;
@@ -904,7 +1114,9 @@ function gameLoop() {
     } else {
         drawObstacles();
         drawStars();
+        drawPowerups();
         drawPlayer();
+        drawActivePowerupHUD();
         drawHUD();
         drawComboHUD();
         drawComboPopups();

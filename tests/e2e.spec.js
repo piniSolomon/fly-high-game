@@ -519,12 +519,12 @@ test('favicon is linked in HTML', async ({ page }) => {
 // ============================================
 // Test: Version is updated to 0.5.0
 // ============================================
-test('game version is 0.6.0', async ({ page }) => {
+test('game version is 0.7.0', async ({ page }) => {
     await page.goto('/index.html');
     await page.waitForTimeout(300);
 
     const version = await page.evaluate(() => GAME_VERSION);
-    expect(version).toBe('0.6.0');
+    expect(version).toBe('0.7.0');
 });
 
 // ============================================
@@ -604,4 +604,145 @@ test('screen shake activates on death', async ({ page }) => {
 
     // Shake should have been triggered (may have decayed slightly)
     expect(shake.intensity).toBeGreaterThan(0);
+});
+
+// ============================================
+// Test: Pause toggles on Escape
+// ============================================
+test('game pauses and resumes with Escape', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    await startGame(page);
+    await page.waitForTimeout(200);
+
+    // Pause
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(100);
+
+    const isPaused = await page.evaluate(() => paused);
+    expect(isPaused).toBe(true);
+
+    // Message should show PAUSED
+    const msg = page.locator('#message');
+    await expect(msg).toBeVisible();
+    const text = await msg.textContent();
+    expect(text).toContain('PAUSED');
+
+    // Unpause
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(100);
+
+    const isUnpaused = await page.evaluate(() => paused);
+    expect(isUnpaused).toBe(false);
+});
+
+// ============================================
+// Test: Game state doesn't update while paused
+// ============================================
+test('game state freezes while paused', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    await startGame(page);
+    await page.waitForTimeout(200);
+
+    // Pause
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(50);
+
+    const distBefore = await page.evaluate(() => distance);
+
+    // Wait a bit — distance shouldn't change
+    await page.waitForTimeout(500);
+
+    const distAfter = await page.evaluate(() => distance);
+    expect(distAfter).toBe(distBefore);
+});
+
+// ============================================
+// Test: Power-up types are defined
+// ============================================
+test('power-up types are defined', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    const types = await page.evaluate(() => POWERUP_TYPES.map(t => t.type));
+    expect(types).toContain('shield');
+    expect(types).toContain('magnet');
+    expect(types).toContain('slow');
+});
+
+// ============================================
+// Test: Shield power-up prevents death from obstacles
+// ============================================
+test('shield power-up blocks obstacle death', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    await startGame(page);
+    await page.waitForTimeout(200);
+
+    // Activate shield and place obstacle on player
+    await page.evaluate(() => {
+        activePowerup = { type: 'shield', timer: 300 };
+        player.invincibleFrames = 0;
+        obstacles.push({
+            x: player.x - 10,
+            gapY: player.y + 100,
+            gapHeight: 150,
+            width: 45,
+            passed: false,
+            color: '#1a2a3a'
+        });
+    });
+
+    await page.waitForTimeout(200);
+
+    // Player should still be alive (shield protects)
+    const gameState = await page.evaluate(() => state);
+    expect(gameState).toBe('playing');
+});
+
+// ============================================
+// Test: Magnet power-up attracts stars
+// ============================================
+test('magnet power-up pulls nearby stars toward player', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    await startGame(page);
+    await page.waitForTimeout(200);
+
+    // Place a star near the player and activate magnet
+    const result = await page.evaluate(() => {
+        const star = stars.find(s => !s.collected);
+        if (!star) return null;
+        // Put star within magnet range
+        star.x = player.x + 80;
+        star.y = player.y;
+        const origX = star.x;
+        activePowerup = { type: 'magnet', timer: 300 };
+        return { origX, starIndex: stars.indexOf(star) };
+    });
+
+    if (result) {
+        // Wait for magnet to pull
+        await page.waitForTimeout(300);
+
+        const newX = await page.evaluate((idx) => stars[idx].x, result.starIndex);
+        // Star should have moved closer to player (smaller x)
+        expect(newX).toBeLessThan(result.origX);
+    }
+});
+
+// ============================================
+// Test: Power-up sound function exists
+// ============================================
+test('power-up sound function is defined', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    const exists = await page.evaluate(() => typeof playPowerupSound === 'function');
+    expect(exists).toBe(true);
 });
