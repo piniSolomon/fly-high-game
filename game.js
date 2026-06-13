@@ -3,7 +3,7 @@
 // A side-scrolling browser game where you fly and collect stars
 // ============================================
 
-const GAME_VERSION = '1.6.0';
+const GAME_VERSION = '1.7.0';
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -13,8 +13,13 @@ const messageEl = document.getElementById('message');
 // --- Audio System (Web Audio API — procedural, no files needed) ---
 var audioCtx = null;
 var audioEnabled = false;
-var masterVolume = 0.5; // 0.0 to 1.0
+var masterVolume = parseFloat(localStorage.getItem('flyHighVolume') || '0.5');
 var masterGainNode = null;
+
+// Settings persistence
+const SETTINGS_KEY = 'flyHighSettings';
+var savedSettings = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
+var musicAutoStart = savedSettings.musicOn !== false; // default true
 
 function initAudio() {
     if (audioCtx) return;
@@ -37,6 +42,16 @@ function setVolume(vol) {
     if (musicGainNode && audioCtx) {
         musicGainNode.gain.setValueAtTime(0.04 * masterVolume, audioCtx.currentTime);
     }
+    saveSettings();
+}
+
+function saveSettings() {
+    const settings = {
+        volume: masterVolume,
+        musicOn: musicPlaying,
+    };
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    localStorage.setItem('flyHighVolume', String(masterVolume));
 }
 
 function playThrustSound() {
@@ -196,6 +211,7 @@ function toggleMusic() {
         initAudio();
         startMusic();
     }
+    saveSettings();
 }
 
 // Screen flash
@@ -689,7 +705,7 @@ function startGame() {
     achievementPopup = null;
     coins = [];
     playStartSound();
-    if (!musicPlaying) startMusic();
+    if (!musicPlaying && musicAutoStart) startMusic();
 
     // Spawn initial stars ahead
     for (let i = 0; i < 5; i++) {
@@ -1679,6 +1695,34 @@ function drawHUD() {
     ctx.textAlign = 'left';
 }
 
+function drawEdgeWarning() {
+    if (state !== 'playing') return;
+
+    const dangerZone = 60; // pixels from edge where warning starts
+    const topDist = player.y - PLAYER_SIZE;
+    const bottomDist = canvas.height - (player.y + PLAYER_SIZE);
+
+    // Top edge warning
+    if (topDist < dangerZone) {
+        const intensity = 1 - (topDist / dangerZone);
+        const grad = ctx.createLinearGradient(0, 0, 0, dangerZone);
+        grad.addColorStop(0, `rgba(255, 50, 50, ${intensity * 0.35})`);
+        grad.addColorStop(1, 'transparent');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, canvas.width, dangerZone);
+    }
+
+    // Bottom edge warning
+    if (bottomDist < dangerZone) {
+        const intensity = 1 - (bottomDist / dangerZone);
+        const grad = ctx.createLinearGradient(0, canvas.height - dangerZone, 0, canvas.height);
+        grad.addColorStop(0, 'transparent');
+        grad.addColorStop(1, `rgba(255, 50, 50, ${intensity * 0.35})`);
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, canvas.height - dangerZone, canvas.width, dangerZone);
+    }
+}
+
 function drawScreenFlash() {
     if (screenFlash.alpha <= 0) return;
     ctx.globalAlpha = screenFlash.alpha;
@@ -2021,6 +2065,7 @@ function gameLoop() {
 
     drawParticles();
     drawScreenFlash();
+    drawEdgeWarning();
 
     if (shakeDuration > 0 && shakeIntensity > 0) {
         ctx.restore();

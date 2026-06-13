@@ -521,12 +521,12 @@ test('favicon is linked in HTML', async ({ page }) => {
 // ============================================
 // Test: Version is updated to 0.5.0
 // ============================================
-test('game version is 1.6.0', async ({ page }) => {
+test('game version is 1.7.0', async ({ page }) => {
     await page.goto('/index.html');
     await page.waitForTimeout(300);
 
     const version = await page.evaluate(() => GAME_VERSION);
-    expect(version).toBe('1.6.0');
+    expect(version).toBe('1.7.0');
 });
 
 // ============================================
@@ -1567,5 +1567,50 @@ test('drawAchievementGallery function is defined', async ({ page }) => {
     await page.waitForTimeout(300);
 
     const exists = await page.evaluate(() => typeof drawAchievementGallery === 'function');
+    expect(exists).toBe(true);
+});
+
+// ============================================
+// Test: Settings save to localStorage
+// ============================================
+test('settings persist volume to localStorage', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    await page.evaluate(() => {
+        setVolume(0.7);
+        saveSettings();
+    });
+
+    const stored = await page.evaluate(() => localStorage.getItem('flyHighVolume'));
+    expect(parseFloat(stored)).toBeCloseTo(0.7, 1);
+
+    // Reload and verify
+    await page.reload();
+    await page.waitForTimeout(500);
+
+    const vol = await page.evaluate(() => masterVolume);
+    expect(vol).toBeCloseTo(0.7, 1);
+});
+
+// ============================================
+// Test: Edge warning function exists
+// ============================================
+test('drawEdgeWarning function is defined', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    const exists = await page.evaluate(() => typeof drawEdgeWarning === 'function');
+    expect(exists).toBe(true);
+});
+
+// ============================================
+// Test: saveSettings function exists
+// ============================================
+test('saveSettings function is defined', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    const exists = await page.evaluate(() => typeof saveSettings === 'function');
     expect(exists).toBe(true);
 });
