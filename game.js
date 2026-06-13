@@ -3,7 +3,7 @@
 // A side-scrolling browser game where you fly and collect stars
 // ============================================
 
-const GAME_VERSION = '1.1.0';
+const GAME_VERSION = '1.2.0';
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -1077,43 +1077,110 @@ function drawPlayer() {
     ctx.translate(player.x, player.y);
     ctx.rotate(player.angle);
 
-    // Body (rocket shape)
-    ctx.fillStyle = '#4488ff';
+    const S = PLAYER_SIZE;
+
+    // --- Fins (behind body) ---
+    ctx.fillStyle = '#2266cc';
+    // Top fin
     ctx.beginPath();
-    ctx.moveTo(PLAYER_SIZE, 0);
-    ctx.lineTo(-PLAYER_SIZE * 0.7, -PLAYER_SIZE * 0.6);
-    ctx.lineTo(-PLAYER_SIZE * 0.4, 0);
-    ctx.lineTo(-PLAYER_SIZE * 0.7, PLAYER_SIZE * 0.6);
+    ctx.moveTo(-S * 0.5, -S * 0.4);
+    ctx.lineTo(-S * 0.9, -S * 0.85);
+    ctx.lineTo(-S * 0.7, -S * 0.3);
+    ctx.closePath();
+    ctx.fill();
+    // Bottom fin
+    ctx.beginPath();
+    ctx.moveTo(-S * 0.5, S * 0.4);
+    ctx.lineTo(-S * 0.9, S * 0.85);
+    ctx.lineTo(-S * 0.7, S * 0.3);
     ctx.closePath();
     ctx.fill();
 
+    // --- Body (sleek rocket) ---
+    ctx.fillStyle = '#4488ff';
+    ctx.beginPath();
+    ctx.moveTo(S * 1.1, 0);                    // nose tip
+    ctx.quadraticCurveTo(S * 0.6, -S * 0.5, -S * 0.5, -S * 0.45);  // top curve
+    ctx.lineTo(-S * 0.5, S * 0.45);            // rear
+    ctx.quadraticCurveTo(S * 0.6, S * 0.5, S * 1.1, 0);             // bottom curve
+    ctx.closePath();
+    ctx.fill();
+
+    // Body glow
     ctx.shadowColor = '#4488ff';
-    ctx.shadowBlur = 15;
+    ctx.shadowBlur = 12;
     ctx.fill();
     ctx.shadowBlur = 0;
 
-    // Window
-    ctx.fillStyle = '#aaddff';
+    // --- Body stripe ---
+    ctx.fillStyle = '#5599ff';
     ctx.beginPath();
-    ctx.arc(PLAYER_SIZE * 0.2, 0, PLAYER_SIZE * 0.2, 0, Math.PI * 2);
+    ctx.moveTo(S * 0.8, 0);
+    ctx.quadraticCurveTo(S * 0.4, -S * 0.18, -S * 0.3, -S * 0.15);
+    ctx.lineTo(-S * 0.3, S * 0.15);
+    ctx.quadraticCurveTo(S * 0.4, S * 0.18, S * 0.8, 0);
+    ctx.closePath();
     ctx.fill();
 
-    // Thrust flame
+    // --- Cockpit window ---
+    ctx.fillStyle = '#aaddff';
+    ctx.shadowColor = '#aaddff';
+    ctx.shadowBlur = 6;
+    ctx.beginPath();
+    ctx.ellipse(S * 0.35, 0, S * 0.18, S * 0.14, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Window glare
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.beginPath();
+    ctx.ellipse(S * 0.4, -S * 0.04, S * 0.06, S * 0.04, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // --- Nose tip highlight ---
+    ctx.fillStyle = '#66aaff';
+    ctx.beginPath();
+    ctx.arc(S * 0.95, 0, S * 0.08, 0, Math.PI * 2);
+    ctx.fill();
+
+    // --- Engine exhaust ---
     if (isThrusting) {
-        const flameLen = 10 + Math.random() * 12;
+        // Outer flame (flickering)
+        const flameLen = 14 + Math.random() * 16;
+        const flameWobble = Math.sin(frameCount * 0.5) * 2;
         ctx.fillStyle = '#ff6600';
         ctx.beginPath();
-        ctx.moveTo(-PLAYER_SIZE * 0.4, -PLAYER_SIZE * 0.25);
-        ctx.lineTo(-PLAYER_SIZE * 0.4 - flameLen, 0);
-        ctx.lineTo(-PLAYER_SIZE * 0.4, PLAYER_SIZE * 0.25);
+        ctx.moveTo(-S * 0.5, -S * 0.3);
+        ctx.quadraticCurveTo(-S * 0.6, flameWobble, -S * 0.5 - flameLen, flameWobble);
+        ctx.lineTo(-S * 0.5, S * 0.3);
         ctx.closePath();
         ctx.fill();
 
+        // Inner flame
         ctx.fillStyle = '#ffcc00';
         ctx.beginPath();
-        ctx.moveTo(-PLAYER_SIZE * 0.4, -PLAYER_SIZE * 0.12);
-        ctx.lineTo(-PLAYER_SIZE * 0.4 - flameLen * 0.6, 0);
-        ctx.lineTo(-PLAYER_SIZE * 0.4, PLAYER_SIZE * 0.12);
+        ctx.moveTo(-S * 0.5, -S * 0.15);
+        ctx.quadraticCurveTo(-S * 0.55, flameWobble * 0.5, -S * 0.5 - flameLen * 0.55, flameWobble * 0.5);
+        ctx.lineTo(-S * 0.5, S * 0.15);
+        ctx.closePath();
+        ctx.fill();
+
+        // Core flame (white-hot)
+        ctx.fillStyle = '#ffffcc';
+        ctx.beginPath();
+        ctx.moveTo(-S * 0.5, -S * 0.06);
+        ctx.lineTo(-S * 0.5 - flameLen * 0.25, 0);
+        ctx.lineTo(-S * 0.5, S * 0.06);
+        ctx.closePath();
+        ctx.fill();
+    } else {
+        // Idle exhaust — small flicker
+        const idleLen = 4 + Math.random() * 4;
+        ctx.fillStyle = 'rgba(255, 100, 0, 0.4)';
+        ctx.beginPath();
+        ctx.moveTo(-S * 0.5, -S * 0.1);
+        ctx.lineTo(-S * 0.5 - idleLen, 0);
+        ctx.lineTo(-S * 0.5, S * 0.1);
         ctx.closePath();
         ctx.fill();
     }
@@ -1210,6 +1277,43 @@ function drawPowerups() {
     }
     ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';
+}
+
+function drawObstacleWarnings() {
+    if (state !== 'playing') return;
+
+    for (const obs of obstacles) {
+        // Only show warning for obstacles approaching from offscreen or near edge
+        if (obs.x > canvas.width - 60 && obs.x < canvas.width + OBSTACLE_WIDTH) {
+            const gapCenter = obs.gapY + obs.gapHeight / 2;
+            const arrowX = canvas.width - 15;
+
+            // Fade in as obstacle approaches
+            const fadeProgress = 1 - (obs.x - (canvas.width - 60)) / (60 + OBSTACLE_WIDTH);
+            ctx.globalAlpha = Math.max(0, Math.min(0.6, fadeProgress));
+
+            // Warning arrow
+            ctx.fillStyle = obs.moving ? '#ff6688' : '#ffaa44';
+            ctx.beginPath();
+            ctx.moveTo(arrowX + 8, gapCenter);
+            ctx.lineTo(arrowX - 4, gapCenter - 8);
+            ctx.lineTo(arrowX - 4, gapCenter + 8);
+            ctx.closePath();
+            ctx.fill();
+
+            // Gap zone indicator (thin line)
+            ctx.strokeStyle = obs.moving ? 'rgba(255, 102, 136, 0.3)' : 'rgba(255, 170, 68, 0.3)';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([4, 4]);
+            ctx.beginPath();
+            ctx.moveTo(arrowX - 6, obs.gapY);
+            ctx.lineTo(arrowX - 6, obs.gapY + obs.gapHeight);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            ctx.globalAlpha = 1;
+        }
+    }
 }
 
 function drawActivePowerupHUD() {
@@ -1445,6 +1549,7 @@ function gameLoop() {
         drawStartScreen();
     } else {
         drawObstacles();
+        drawObstacleWarnings();
         drawStars();
         drawPowerups();
         drawPlayer();

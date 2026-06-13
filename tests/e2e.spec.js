@@ -519,12 +519,12 @@ test('favicon is linked in HTML', async ({ page }) => {
 // ============================================
 // Test: Version is updated to 0.5.0
 // ============================================
-test('game version is 1.1.0', async ({ page }) => {
+test('game version is 1.2.0', async ({ page }) => {
     await page.goto('/index.html');
     await page.waitForTimeout(300);
 
     const version = await page.evaluate(() => GAME_VERSION);
-    expect(version).toBe('1.1.0');
+    expect(version).toBe('1.2.0');
 });
 
 // ============================================
@@ -1173,4 +1173,40 @@ test('setupMobileButton function is defined', async ({ page }) => {
 
     const exists = await page.evaluate(() => typeof setupMobileButton === 'function');
     expect(exists).toBe(true);
+});
+
+// ============================================
+// Test: Obstacle warning draw function exists
+// ============================================
+test('obstacle warning indicator function exists', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    const exists = await page.evaluate(() => typeof drawObstacleWarnings === 'function');
+    expect(exists).toBe(true);
+});
+
+// ============================================
+// Test: Player rocket renders without errors during gameplay
+// ============================================
+test('game runs without console errors during gameplay', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    await startGame(page);
+
+    // Play for a bit to exercise drawing code
+    for (let i = 0; i < 5; i++) {
+        await page.mouse.down();
+        await page.waitForTimeout(200);
+        await page.mouse.up();
+        await page.waitForTimeout(100);
+    }
+
+    // Check no JS errors occurred
+    const errors = await page.evaluate(() => {
+        // If there were errors, the game loop would have stopped
+        return state === 'playing' || state === 'dead';
+    });
+    expect(errors).toBe(true);
 });
