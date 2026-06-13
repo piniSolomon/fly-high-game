@@ -3,7 +3,7 @@
 // A side-scrolling browser game where you fly and collect stars
 // ============================================
 
-const GAME_VERSION = '1.5.0';
+const GAME_VERSION = '1.6.0';
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -13,14 +13,29 @@ const messageEl = document.getElementById('message');
 // --- Audio System (Web Audio API — procedural, no files needed) ---
 var audioCtx = null;
 var audioEnabled = false;
+var masterVolume = 0.5; // 0.0 to 1.0
+var masterGainNode = null;
 
 function initAudio() {
     if (audioCtx) return;
     try {
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        masterGainNode = audioCtx.createGain();
+        masterGainNode.gain.setValueAtTime(masterVolume, audioCtx.currentTime);
+        masterGainNode.connect(audioCtx.destination);
         audioEnabled = true;
     } catch (e) {
         audioEnabled = false;
+    }
+}
+
+function setVolume(vol) {
+    masterVolume = Math.max(0, Math.min(1, vol));
+    if (masterGainNode && audioCtx) {
+        masterGainNode.gain.setValueAtTime(masterVolume, audioCtx.currentTime);
+    }
+    if (musicGainNode && audioCtx) {
+        musicGainNode.gain.setValueAtTime(0.04 * masterVolume, audioCtx.currentTime);
     }
 }
 
@@ -34,7 +49,7 @@ function playThrustSound() {
     gain.gain.setValueAtTime(0.06, audioCtx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
     osc.connect(gain);
-    gain.connect(audioCtx.destination);
+    gain.connect(masterGainNode);
     osc.start();
     osc.stop(audioCtx.currentTime + 0.1);
 }
@@ -50,7 +65,7 @@ function playCollectSound() {
     gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.25);
     osc.connect(gain);
-    gain.connect(audioCtx.destination);
+    gain.connect(masterGainNode);
     osc.start();
     osc.stop(audioCtx.currentTime + 0.25);
 }
@@ -83,7 +98,7 @@ function playDeathSound() {
     noiseGain.gain.setValueAtTime(0.1, audioCtx.currentTime);
     noiseGain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
     noise.connect(noiseGain);
-    noiseGain.connect(audioCtx.destination);
+    noiseGain.connect(masterGainNode);
     noise.start();
 }
 
@@ -99,7 +114,7 @@ function playStartSound() {
         gain.gain.setValueAtTime(0.1, t);
         gain.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
         osc.connect(gain);
-        gain.connect(audioCtx.destination);
+        gain.connect(masterGainNode);
         osc.start(t);
         osc.stop(t + 0.15);
     });
@@ -117,7 +132,7 @@ function playPowerupSound() {
         gain.gain.setValueAtTime(0.08, t);
         gain.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
         osc.connect(gain);
-        gain.connect(audioCtx.destination);
+        gain.connect(masterGainNode);
         osc.start(t);
         osc.stop(t + 0.12);
     });
@@ -134,7 +149,7 @@ function startMusic() {
 
     musicGainNode = audioCtx.createGain();
     musicGainNode.gain.setValueAtTime(0.04, audioCtx.currentTime);
-    musicGainNode.connect(audioCtx.destination);
+    musicGainNode.connect(masterGainNode);
 
     // Ambient pad — two detuned oscillators for thickness
     const freqs = [110, 165, 220]; // A2, E3, A3 — open fifth drone
@@ -307,6 +322,7 @@ const ACHIEVEMENT_DEFS = [
 
 var unlockedAchievements = JSON.parse(localStorage.getItem(ACHIEVEMENTS_KEY) || '[]');
 var achievementPopup = null; // { name, desc, life }
+var showingAchievements = false;
 var sessionPowerupsUsed = new Set();
 var sessionCollectedRainbow = false;
 var sessionMaxCombo = 0;
@@ -434,6 +450,23 @@ window.addEventListener('keydown', (e) => {
     // Music toggle
     if (e.code === 'KeyM') {
         toggleMusic();
+        return;
+    }
+    // Volume control
+    if (e.code === 'Equal' || e.code === 'NumpadAdd') {
+        setVolume(masterVolume + 0.1);
+        return;
+    }
+    if (e.code === 'Minus' || e.code === 'NumpadSubtract') {
+        setVolume(masterVolume - 0.1);
+        return;
+    }
+    // Achievement gallery toggle
+    if (e.code === 'Tab') {
+        e.preventDefault();
+        if (state === 'start') {
+            showingAchievements = !showingAchievements;
+        }
         return;
     }
     // Pause toggle
@@ -1640,7 +1673,8 @@ function drawHUD() {
     // Music indicator
     ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
     ctx.font = '11px Segoe UI, sans-serif';
-    ctx.fillText(musicPlaying ? '♪ M' : '♪ off', canvas.width - 20, 92);
+    const volPct = Math.round(masterVolume * 100);
+    ctx.fillText(musicPlaying ? `♪ ${volPct}%` : '♪ off', canvas.width - 20, 92);
 
     ctx.textAlign = 'left';
 }
@@ -1651,6 +1685,59 @@ function drawScreenFlash() {
     ctx.fillStyle = screenFlash.color;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.globalAlpha = 1;
+}
+
+function drawAchievementGallery() {
+    const cx = canvas.width / 2;
+
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.textAlign = 'center';
+
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 32px Segoe UI, sans-serif';
+    ctx.fillText('ACHIEVEMENTS', cx, 50);
+
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.font = '14px Segoe UI, sans-serif';
+    ctx.fillText(`${unlockedAchievements.length} / ${ACHIEVEMENT_DEFS.length} unlocked`, cx, 75);
+
+    let y = 110;
+    const colW = 320;
+    const startX = cx - colW / 2;
+
+    for (const def of ACHIEVEMENT_DEFS) {
+        const unlocked = unlockedAchievements.includes(def.id);
+
+        // Row background
+        ctx.fillStyle = unlocked ? 'rgba(255, 215, 0, 0.08)' : 'rgba(255, 255, 255, 0.03)';
+        ctx.fillRect(startX, y - 14, colW, 32);
+
+        // Trophy icon
+        ctx.textAlign = 'left';
+        ctx.font = '16px sans-serif';
+        ctx.fillStyle = unlocked ? '#ffd700' : '#333344';
+        ctx.fillText(unlocked ? '🏆' : '🔒', startX + 8, y + 5);
+
+        // Name
+        ctx.fillStyle = unlocked ? '#ffffff' : '#555566';
+        ctx.font = 'bold 13px Segoe UI, sans-serif';
+        ctx.fillText(def.name, startX + 35, y);
+
+        // Description
+        ctx.fillStyle = unlocked ? 'rgba(255, 255, 255, 0.6)' : '#444455';
+        ctx.font = '11px Segoe UI, sans-serif';
+        ctx.fillText(def.desc, startX + 35, y + 14);
+
+        y += 36;
+    }
+
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#666688';
+    ctx.font = '14px Segoe UI, sans-serif';
+    ctx.fillText('Press Tab to go back', cx, canvas.height - 30);
+    ctx.textAlign = 'left';
 }
 
 function drawTutorial() {
@@ -1746,7 +1833,12 @@ function drawStartScreen() {
     ctx.font = '16px Segoe UI, sans-serif';
     ctx.fillText('Arrow Keys / WASD to move', canvas.width / 2, canvas.height / 2 + 25);
     ctx.fillText('Space / Click / Tap to thrust up', canvas.width / 2, canvas.height / 2 + 50);
-    ctx.fillText('M = Music  |  Esc = Pause', canvas.width / 2, canvas.height / 2 + 72);
+    ctx.fillText('M = Music  |  Esc = Pause  |  +/- Volume', canvas.width / 2, canvas.height / 2 + 72);
+
+    // Achievement gallery hint
+    ctx.fillStyle = 'rgba(255, 215, 0, 0.35)';
+    ctx.font = '13px Segoe UI, sans-serif';
+    ctx.fillText('Press Tab for Achievements', canvas.width / 2, canvas.height / 2 + 92);
 
     if (highScore > 0) {
         ctx.fillStyle = '#ffd700';
@@ -1907,6 +1999,8 @@ function gameLoop() {
     if (state === 'start') {
         if (showingTutorial) {
             drawTutorial();
+        } else if (showingAchievements) {
+            drawAchievementGallery();
         } else {
             drawStartScreen();
         }

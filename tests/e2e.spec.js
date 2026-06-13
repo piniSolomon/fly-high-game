@@ -521,12 +521,12 @@ test('favicon is linked in HTML', async ({ page }) => {
 // ============================================
 // Test: Version is updated to 0.5.0
 // ============================================
-test('game version is 1.5.0', async ({ page }) => {
+test('game version is 1.6.0', async ({ page }) => {
     await page.goto('/index.html');
     await page.waitForTimeout(300);
 
     const version = await page.evaluate(() => GAME_VERSION);
-    expect(version).toBe('1.5.0');
+    expect(version).toBe('1.6.0');
 });
 
 // ============================================
@@ -1519,4 +1519,53 @@ test('smoke particles have smoke type', async ({ page }) => {
     const types = await page.evaluate(() => particles.map(p => p.type));
     expect(types.length).toBe(3);
     expect(types.every(t => t === 'smoke')).toBe(true);
+});
+
+// ============================================
+// Test: Volume control functions exist
+// ============================================
+test('setVolume function adjusts masterVolume', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    await page.evaluate(() => {
+        setVolume(0.8);
+    });
+    const vol = await page.evaluate(() => masterVolume);
+    expect(vol).toBeCloseTo(0.8, 1);
+
+    // Clamp to 0-1
+    await page.evaluate(() => { setVolume(1.5); });
+    const clamped = await page.evaluate(() => masterVolume);
+    expect(clamped).toBe(1);
+
+    await page.evaluate(() => { setVolume(-0.5); });
+    const clampedLow = await page.evaluate(() => masterVolume);
+    expect(clampedLow).toBe(0);
+});
+
+// ============================================
+// Test: Achievement gallery toggle works
+// ============================================
+test('achievement gallery toggles with showingAchievements', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    const before = await page.evaluate(() => showingAchievements);
+    expect(before).toBe(false);
+
+    await page.evaluate(() => { showingAchievements = true; });
+    const after = await page.evaluate(() => showingAchievements);
+    expect(after).toBe(true);
+});
+
+// ============================================
+// Test: Achievement gallery draw function exists
+// ============================================
+test('drawAchievementGallery function is defined', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    const exists = await page.evaluate(() => typeof drawAchievementGallery === 'function');
+    expect(exists).toBe(true);
 });
