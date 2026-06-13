@@ -2,32 +2,31 @@
 
 ## Current Goal
 
-Continue improving — always making the game better.
+v2.0.0 released! Continue iterating.
 
 ## Tasks
 
-### Completed (v0.1.0 — v1.9.0)
-- [x] All v1.8.0 features (see git history)
-- [x] Zen mode (Z key — no obstacles, screen wrap, peaceful play)
-- [x] Progressive obstacle coloring (darker + more saturated with distance)
+### Completed (v0.1.0 — v2.0.0)
+- [x] All v1.9.0 features (see git history)
+- [x] Nebula cloud parallax layer (6 drifting radial-gradient blobs, deepest parallax)
 
 ### Next Up
-- [ ] Add cloud/nebula parallax layer for visual depth
 - [ ] Refactor game.js into modules (audio, rendering, state, input)
 - [ ] Performance optimization (object pooling for particles)
 - [ ] Add controller/gamepad support
 - [ ] Add dynamic music (chord changes with theme/difficulty)
-- [ ] Add seasonal events or daily challenges
 - [ ] Add player skins (unlock with achievements)
 - [ ] Add a replay system (watch last death)
+- [ ] Add seasonal events or daily challenges
+- [ ] Add endless mode variants (speed-only, stars-only)
 
 ## Status
 
-v1.9.0 — 80 E2E tests. Zen mode, progressive coloring. ~2500 lines of game code.
+v2.0.0 RELEASED — 81 E2E tests. Nebula clouds, 3-layer parallax background. ~2600 lines of game code.
 
 ## Learnings
 
-- Zen mode with screen wrap creates a completely different feel — relaxing vs intense
-- Progressive coloring (HSL lightness + saturation) creates subtle visual danger cues
-- Boundary wrapping (y → opposite edge) needs careful PLAYER_SIZE offset
-- Testing wrap behavior needs multiple frame ticks — single-frame assertions are flaky
+- Radial gradients with low alpha create convincing nebula effects
+- Three parallax layers (clouds, far stars, near stars) give real depth
+- Wobble with sinusoidal offset makes clouds feel organic
+- Recycling off-screen objects with new random properties keeps the view fresh
