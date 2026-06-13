@@ -459,3 +459,70 @@ test('parallax background stars are initialized', async ({ page }) => {
     expect(nearCount).toBeGreaterThan(0);
     expect(farCount).toBeGreaterThan(nearCount);
 });
+
+// ============================================
+// Test: Audio system initializes on first interaction
+// ============================================
+test('audio system initializes on game start', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    // Before interaction — no audioCtx
+    const beforeAudio = await page.evaluate(() => audioCtx);
+    expect(beforeAudio).toBe(null);
+
+    // Start game (triggers initAudio)
+    await startGame(page);
+
+    const afterAudio = await page.evaluate(() => audioCtx !== null);
+    expect(afterAudio).toBe(true);
+
+    const enabled = await page.evaluate(() => audioEnabled);
+    expect(enabled).toBe(true);
+});
+
+// ============================================
+// Test: Sound functions exist and are callable
+// ============================================
+test('sound functions are defined', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    const fns = await page.evaluate(() => ({
+        thrust: typeof playThrustSound === 'function',
+        collect: typeof playCollectSound === 'function',
+        death: typeof playDeathSound === 'function',
+        start: typeof playStartSound === 'function',
+    }));
+
+    expect(fns.thrust).toBe(true);
+    expect(fns.collect).toBe(true);
+    expect(fns.death).toBe(true);
+    expect(fns.start).toBe(true);
+});
+
+// ============================================
+// Test: Favicon is linked
+// ============================================
+test('favicon is linked in HTML', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    const faviconHref = await page.evaluate(() => {
+        const link = document.querySelector('link[rel="icon"]');
+        return link ? link.getAttribute('href') : null;
+    });
+
+    expect(faviconHref).toBe('favicon.svg');
+});
+
+// ============================================
+// Test: Version is updated to 0.5.0
+// ============================================
+test('game version is 0.5.0', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    const version = await page.evaluate(() => GAME_VERSION);
+    expect(version).toBe('0.5.0');
+});

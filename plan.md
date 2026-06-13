@@ -2,7 +2,7 @@
 
 ## Current Goal
 
-Add E2E test suite for all existing features, then continue polishing the game.
+Add sound effects and a favicon to polish the game experience.
 
 ## Tasks
 
@@ -23,31 +23,26 @@ Add E2E test suite for all existing features, then continue polishing the game.
 - [x] Add persistent high score (localStorage)
 - [x] Add distance counter HUD
 - [x] Add parallax background (two-layer star field)
+- [x] Set up Playwright E2E test infrastructure (19 tests, all passing)
+- [x] Add full directional controls (Arrow keys / WASD — up, down, left, right)
+- [x] Lighter gravity for better flight feel
+- [x] Add game version display on start screen (SemVer)
 
-### In Progress — E2E Testing
-- [ ] Set up Playwright test infrastructure (package.json, config, test directory)
-- [ ] Write E2E tests for all existing features:
-  - [ ] Game loads and shows start screen with title
-  - [ ] Game starts on click/space/tap input
-  - [ ] Player responds to thrust (moves upward when holding)
-  - [ ] Stars appear and score increments on collection
-  - [ ] Obstacles appear and cause death on collision
-  - [ ] Game over screen shows score and high score
-  - [ ] Game restarts correctly after death
-  - [ ] High score persists across page reloads (localStorage)
-  - [ ] Speed/distance increases over time
-  - [ ] Parallax background scrolls
-
-### Next Up — More Features
+### In Progress
 - [ ] Add sound effects (thrust, collect star, death)
-- [ ] Add mobile-responsive controls and sizing
 - [ ] Add a simple favicon
+
+### Next Up
+- [ ] Add mobile-responsive touch controls (on-screen buttons or swipe zones)
 - [ ] Improve player visual (animated sprite or better rocket)
 - [ ] Add a combo/streak system for collecting stars quickly
+- [ ] Add background music (ambient space theme)
+- [ ] Add screen shake on death
+- [ ] Add power-ups (shield, magnet, speed boost)
 
 ## Status
 
-Side-scroller prototype complete with obstacles, scrolling, and difficulty scaling. Now adding mandatory E2E tests per new project requirement.
+v0.4.0 complete. 19 E2E tests passing. Game is playable with full directional controls, obstacles, stars, scoring, and difficulty scaling. Moving to audio/polish phase.
 
 ## Open Questions
 
@@ -58,5 +53,7 @@ None.
 - Canvas-based game loop with requestAnimationFrame works well
 - Particle effects add a lot of visual polish for very little code
 - Variable declaration order matters — `let` declarations called before init cause ReferenceError
-- Need to be careful about parallax bg star re-init on resize vs initial load
+- Need `var` for game state to be accessible in Playwright E2E tests via `page.evaluate()`
 - Side-scrolling transforms the game feel significantly — much more engaging
+- Lighter gravity (0.22) makes flight much more enjoyable and controllable
+- E2E tests for games need deterministic setups (teleport player, force-spawn) rather than playing through

@@ -3,12 +3,107 @@
 // A side-scrolling browser game where you fly and collect stars
 // ============================================
 
-const GAME_VERSION = '0.4.0';
+const GAME_VERSION = '0.5.0';
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 const scoreEl = document.getElementById('score');
 const messageEl = document.getElementById('message');
+
+// --- Audio System (Web Audio API — procedural, no files needed) ---
+var audioCtx = null;
+var audioEnabled = false;
+
+function initAudio() {
+    if (audioCtx) return;
+    try {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        audioEnabled = true;
+    } catch (e) {
+        audioEnabled = false;
+    }
+}
+
+function playThrustSound() {
+    if (!audioEnabled || !audioCtx) return;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(80, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + 0.1);
+    gain.gain.setValueAtTime(0.06, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.1);
+}
+
+function playCollectSound() {
+    if (!audioEnabled || !audioCtx) return;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(600, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.1);
+    osc.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + 0.2);
+    gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.25);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.25);
+}
+
+function playDeathSound() {
+    if (!audioEnabled || !audioCtx) return;
+    // Low rumble
+    const osc1 = audioCtx.createOscillator();
+    const gain1 = audioCtx.createGain();
+    osc1.type = 'sawtooth';
+    osc1.frequency.setValueAtTime(200, audioCtx.currentTime);
+    osc1.frequency.exponentialRampToValueAtTime(30, audioCtx.currentTime + 0.5);
+    gain1.gain.setValueAtTime(0.15, audioCtx.currentTime);
+    gain1.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
+    osc1.connect(gain1);
+    gain1.connect(audioCtx.destination);
+    osc1.start();
+    osc1.stop(audioCtx.currentTime + 0.5);
+
+    // Noise burst
+    const bufferSize = audioCtx.sampleRate * 0.3;
+    const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+        data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+    }
+    const noise = audioCtx.createBufferSource();
+    const noiseGain = audioCtx.createGain();
+    noise.buffer = buffer;
+    noiseGain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+    noise.connect(noiseGain);
+    noiseGain.connect(audioCtx.destination);
+    noise.start();
+}
+
+function playStartSound() {
+    if (!audioEnabled || !audioCtx) return;
+    const notes = [400, 500, 700];
+    notes.forEach((freq, i) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        const t = audioCtx.currentTime + i * 0.08;
+        osc.frequency.setValueAtTime(freq, t);
+        gain.gain.setValueAtTime(0.1, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(t);
+        osc.stop(t + 0.15);
+    });
+}
 
 // --- Background Stars (parallax decoration) ---
 var bgStarsFar = [];
@@ -118,6 +213,7 @@ window.addEventListener('keydown', (e) => {
     }
     if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') {
         if (state === 'start' || state === 'dead') {
+            initAudio();
             startGame();
         }
     }
@@ -128,6 +224,7 @@ window.addEventListener('keyup', (e) => {
 window.addEventListener('mousedown', () => {
     keys['Mouse'] = true;
     if (state === 'start' || state === 'dead') {
+        initAudio();
         startGame();
     }
 });
@@ -138,6 +235,7 @@ window.addEventListener('touchstart', (e) => {
     e.preventDefault();
     keys['Mouse'] = true;
     if (state === 'start' || state === 'dead') {
+        initAudio();
         startGame();
     }
 }, { passive: false });
@@ -213,6 +311,7 @@ function startGame() {
     stars = [];
     obstacles = [];
     particles = [];
+    playStartSound();
 
     // Spawn initial stars ahead
     for (let i = 0; i < 5; i++) {
@@ -234,6 +333,7 @@ function die() {
         localStorage.setItem('flyHighScore', String(highScore));
     }
     emitParticles(player.x, player.y, '#ff4444', 30);
+    playDeathSound();
     const distStr = Math.floor(distance).toLocaleString();
     showMessage(
         `Game Over!<br>` +
@@ -331,6 +431,9 @@ function update() {
     if (isThrusting && frameCount % 2 === 0) {
         emitParticles(player.x - 15, player.y + 5, '#ff8800', 2);
     }
+    if (isThrusting && frameCount % 8 === 0) {
+        playThrustSound();
+    }
 
     // Boundaries — die if hit top or bottom
     if (player.y - PLAYER_SIZE < 0 || player.y + PLAYER_SIZE > canvas.height) {
@@ -364,6 +467,7 @@ function update() {
             score++;
             scoreEl.textContent = `Score: ${score}`;
             emitParticles(star.x, star.y, '#ffd700', 12);
+            playCollectSound();
         }
     }
 
