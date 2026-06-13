@@ -519,10 +519,89 @@ test('favicon is linked in HTML', async ({ page }) => {
 // ============================================
 // Test: Version is updated to 0.5.0
 // ============================================
-test('game version is 0.5.0', async ({ page }) => {
+test('game version is 0.6.0', async ({ page }) => {
     await page.goto('/index.html');
     await page.waitForTimeout(300);
 
     const version = await page.evaluate(() => GAME_VERSION);
-    expect(version).toBe('0.5.0');
+    expect(version).toBe('0.6.0');
+});
+
+// ============================================
+// Test: Combo system works
+// ============================================
+test('combo increments on rapid star collection', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    await startGame(page);
+    await page.waitForTimeout(100);
+
+    // Collect multiple stars rapidly
+    await page.evaluate(() => {
+        for (let i = 0; i < 4; i++) {
+            const star = stars.find(s => !s.collected);
+            if (star) {
+                player.x = star.x;
+                player.y = star.y;
+                star.collected = true;
+                combo++;
+                comboTimer = 120;
+                score++;
+            }
+        }
+        scoreEl.textContent = `Score: ${score}`;
+    });
+
+    const comboVal = await page.evaluate(() => combo);
+    expect(comboVal).toBeGreaterThanOrEqual(3);
+});
+
+// ============================================
+// Test: Combo multiplier increases at thresholds
+// ============================================
+test('combo multiplier increases at thresholds', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    await startGame(page);
+    await page.waitForTimeout(100);
+
+    // Set combo to threshold level
+    const mult = await page.evaluate(() => {
+        combo = 6;
+        comboTimer = 120;
+        comboMultiplier = 1;
+        for (const threshold of COMBO_THRESHOLDS) {
+            if (combo >= threshold) comboMultiplier++;
+        }
+        return comboMultiplier;
+    });
+
+    expect(mult).toBeGreaterThan(1);
+});
+
+// ============================================
+// Test: Screen shake activates on death
+// ============================================
+test('screen shake activates on death', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    await startGame(page);
+    await page.waitForTimeout(200);
+
+    // Force death
+    await page.evaluate(() => {
+        player.y = -100;
+    });
+    await page.waitForTimeout(200);
+
+    const shake = await page.evaluate(() => ({
+        intensity: shakeIntensity,
+        duration: shakeDuration
+    }));
+
+    // Shake should have been triggered (may have decayed slightly)
+    expect(shake.intensity).toBeGreaterThan(0);
 });

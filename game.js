@@ -3,7 +3,7 @@
 // A side-scrolling browser game where you fly and collect stars
 // ============================================
 
-const GAME_VERSION = '0.5.0';
+const GAME_VERSION = '0.6.0';
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -181,6 +181,18 @@ var scrollSpeed = BASE_SCROLL_SPEED;
 var nextObstacleIn = 0;
 var nextStarIn = 0;
 
+// Screen shake
+var shakeIntensity = 0;
+var shakeDuration = 0;
+
+// Combo system
+var combo = 0;
+var comboTimer = 0;
+var comboMultiplier = 1;
+const COMBO_TIMEOUT = 120; // frames (~2 seconds to keep combo alive)
+const COMBO_THRESHOLDS = [3, 6, 10, 15]; // combo counts for multiplier levels
+var comboPopups = []; // floating text popups
+
 // --- Player ---
 var player = {
     x: 0,
@@ -311,6 +323,12 @@ function startGame() {
     stars = [];
     obstacles = [];
     particles = [];
+    combo = 0;
+    comboTimer = 0;
+    comboMultiplier = 1;
+    comboPopups = [];
+    shakeIntensity = 0;
+    shakeDuration = 0;
     playStartSound();
 
     // Spawn initial stars ahead
@@ -334,6 +352,8 @@ function die() {
     }
     emitParticles(player.x, player.y, '#ff4444', 30);
     playDeathSound();
+    shakeIntensity = 12;
+    shakeDuration = 20;
     const distStr = Math.floor(distance).toLocaleString();
     showMessage(
         `Game Over!<br>` +
@@ -464,10 +484,37 @@ function update() {
         const dist = Math.sqrt(dx * dx + dy * dy);
         if (dist < PLAYER_SIZE + star.size) {
             star.collected = true;
-            score++;
+            combo++;
+            comboTimer = COMBO_TIMEOUT;
+            // Calculate multiplier based on combo thresholds
+            comboMultiplier = 1;
+            for (const threshold of COMBO_THRESHOLDS) {
+                if (combo >= threshold) comboMultiplier++;
+            }
+            const points = comboMultiplier;
+            score += points;
             scoreEl.textContent = `Score: ${score}`;
             emitParticles(star.x, star.y, '#ffd700', 12);
             playCollectSound();
+            // Combo popup
+            if (comboMultiplier > 1) {
+                comboPopups.push({
+                    x: star.x,
+                    y: star.y,
+                    text: `x${comboMultiplier}`,
+                    life: 1.0,
+                    vy: -1.5
+                });
+            }
+            if (combo > 1) {
+                comboPopups.push({
+                    x: star.x,
+                    y: star.y - 20,
+                    text: `+${points}`,
+                    life: 1.0,
+                    vy: -2
+                });
+            }
         }
     }
 
@@ -536,6 +583,34 @@ function update() {
         p.life -= p.decay;
         if (p.life <= 0) {
             particles.splice(i, 1);
+        }
+    }
+
+    // Combo timer decay
+    if (comboTimer > 0) {
+        comboTimer--;
+        if (comboTimer <= 0) {
+            combo = 0;
+            comboMultiplier = 1;
+        }
+    }
+
+    // Update combo popups
+    for (let i = comboPopups.length - 1; i >= 0; i--) {
+        const p = comboPopups[i];
+        p.y += p.vy;
+        p.x -= scrollSpeed * 0.5;
+        p.life -= 0.02;
+        if (p.life <= 0) {
+            comboPopups.splice(i, 1);
+        }
+    }
+
+    // Screen shake decay
+    if (shakeDuration > 0) {
+        shakeDuration--;
+        if (shakeDuration <= 0) {
+            shakeIntensity = 0;
         }
     }
 }
@@ -769,8 +844,58 @@ function drawStartScreen() {
 
 // --- Main Loop ---
 
+function drawComboPopups() {
+    for (const p of comboPopups) {
+        ctx.globalAlpha = p.life;
+        ctx.fillStyle = '#ffd700';
+        ctx.font = 'bold 22px Segoe UI, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.shadowColor = '#ffd700';
+        ctx.shadowBlur = 10;
+        ctx.fillText(p.text, p.x, p.y);
+        ctx.shadowBlur = 0;
+    }
+    ctx.globalAlpha = 1;
+    ctx.textAlign = 'left';
+}
+
+function drawComboHUD() {
+    if (state !== 'playing' || combo < 2) return;
+
+    // Combo counter
+    const comboText = `Combo: ${combo}`;
+    const multText = comboMultiplier > 1 ? ` (x${comboMultiplier})` : '';
+
+    ctx.fillStyle = comboTimer < 30 ? `rgba(255, 215, 0, ${0.3 + (comboTimer / 30) * 0.7})` : '#ffd700';
+    ctx.font = 'bold 20px Segoe UI, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(comboText + multText, 20, 70);
+
+    // Combo timer bar
+    const barWidth = 100;
+    const barHeight = 4;
+    const barX = 20;
+    const barY = 78;
+    const fillRatio = comboTimer / COMBO_TIMEOUT;
+
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+    ctx.fillRect(barX, barY, barWidth, barHeight);
+
+    const barColor = fillRatio > 0.5 ? '#ffd700' : fillRatio > 0.2 ? '#ff8800' : '#ff4444';
+    ctx.fillStyle = barColor;
+    ctx.fillRect(barX, barY, barWidth * fillRatio, barHeight);
+}
+
 function gameLoop() {
     update();
+
+    // Apply screen shake
+    if (shakeDuration > 0 && shakeIntensity > 0) {
+        ctx.save();
+        const sx = (Math.random() - 0.5) * shakeIntensity * (shakeDuration / 20);
+        const sy = (Math.random() - 0.5) * shakeIntensity * (shakeDuration / 20);
+        ctx.translate(sx, sy);
+    }
 
     drawBackground();
 
@@ -781,9 +906,15 @@ function gameLoop() {
         drawStars();
         drawPlayer();
         drawHUD();
+        drawComboHUD();
+        drawComboPopups();
     }
 
     drawParticles();
+
+    if (shakeDuration > 0 && shakeIntensity > 0) {
+        ctx.restore();
+    }
 
     requestAnimationFrame(gameLoop);
 }
