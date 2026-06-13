@@ -521,12 +521,12 @@ test('favicon is linked in HTML', async ({ page }) => {
 // ============================================
 // Test: Version is updated to 0.5.0
 // ============================================
-test('game version is 2.1.0', async ({ page }) => {
+test('game version is 2.2.0', async ({ page }) => {
     await page.goto('/index.html');
     await page.waitForTimeout(300);
 
     const version = await page.evaluate(() => GAME_VERSION);
-    expect(version).toBe('2.1.0');
+    expect(version).toBe('2.2.0');
 });
 
 // ============================================
@@ -1839,4 +1839,53 @@ test('gamepad keys are checked in movement logic', async ({ page }) => {
         keys['GamepadRight'] = false;
         keys['GamepadA'] = false;
     });
+});
+
+// ============================================
+// Test: Dynamic music chords exist for each theme
+// ============================================
+test('music chords match theme count', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    const info = await page.evaluate(() => ({
+        chordCount: MUSIC_CHORDS.length,
+        themeCount: THEMES.length,
+        firstChordNotes: MUSIC_CHORDS[0].length,
+    }));
+
+    expect(info.chordCount).toBe(info.themeCount);
+    expect(info.firstChordNotes).toBeGreaterThanOrEqual(3);
+});
+
+// ============================================
+// Test: Music chord index changes with distance
+// ============================================
+test('getMusicChordIndex changes with distance', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    const indices = await page.evaluate(() => {
+        state = 'playing';
+        return [0, 1500, 3000, 4500].map(d => {
+            distance = d;
+            return getMusicChordIndex();
+        });
+    });
+
+    // Each 1500m should give a different chord index
+    expect(new Set(indices).size).toBe(4);
+    expect(indices[0]).toBe(0);
+    expect(indices[1]).toBe(1);
+});
+
+// ============================================
+// Test: updateMusicChord function exists
+// ============================================
+test('updateMusicChord function is defined', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+
+    const exists = await page.evaluate(() => typeof updateMusicChord === 'function');
+    expect(exists).toBe(true);
 });

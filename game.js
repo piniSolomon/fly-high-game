@@ -3,7 +3,7 @@
 // A side-scrolling browser game where you fly and collect stars
 // ============================================
 
-const GAME_VERSION = '2.1.0';
+const GAME_VERSION = '2.2.0';
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -169,22 +169,54 @@ function playPowerupSound() {
     });
 }
 
-// --- Background Music (procedural ambient) ---
+// --- Background Music (dynamic procedural ambient) ---
 var musicPlaying = false;
 var musicGainNode = null;
 var musicOscillators = [];
+var currentMusicChord = -1;
+
+// Chord progressions matched to themes
+const MUSIC_CHORDS = [
+    [110, 165, 220],    // space: A2, E3, A3 — open fifth
+    [130.81, 196, 261.63], // nebula: C3, G3, C4 — ethereal
+    [98, 146.83, 196],  // deep: G2, D3, G3 — dark fifth
+    [116.54, 174.61, 233.08], // aurora: Bb2, F3, Bb3 — warm
+];
+
+function getMusicChordIndex() {
+    if (state !== 'playing') return 0;
+    return Math.floor(distance / 1500) % MUSIC_CHORDS.length;
+}
+
+function updateMusicChord() {
+    if (!musicPlaying || !audioCtx) return;
+    const idx = getMusicChordIndex();
+    if (idx === currentMusicChord) return;
+    currentMusicChord = idx;
+
+    const chord = MUSIC_CHORDS[idx];
+    // Smoothly transition each oscillator to new frequency
+    for (let i = 0; i < musicOscillators.length; i++) {
+        const osc = musicOscillators[i];
+        const chordIdx = Math.floor(i / 2); // pairs of detuned oscs
+        if (chordIdx < chord.length) {
+            const targetFreq = chord[chordIdx] * (i % 2 === 0 ? 1 : 1.003);
+            osc.frequency.linearRampToValueAtTime(targetFreq, audioCtx.currentTime + 2);
+        }
+    }
+}
 
 function startMusic() {
     if (!audioEnabled || !audioCtx || musicPlaying) return;
     musicPlaying = true;
+    currentMusicChord = getMusicChordIndex();
 
     musicGainNode = audioCtx.createGain();
-    musicGainNode.gain.setValueAtTime(0.04, audioCtx.currentTime);
+    musicGainNode.gain.setValueAtTime(0.04 * masterVolume, audioCtx.currentTime);
     musicGainNode.connect(masterGainNode);
 
-    // Ambient pad — two detuned oscillators for thickness
-    const freqs = [110, 165, 220]; // A2, E3, A3 — open fifth drone
-    freqs.forEach((freq, i) => {
+    const chord = MUSIC_CHORDS[currentMusicChord];
+    chord.forEach((freq, i) => {
         const osc = audioCtx.createOscillator();
         osc.type = 'sine';
         osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
@@ -1355,6 +1387,11 @@ function update() {
     // Check achievements every 30 frames
     if (frameCount % 30 === 0) {
         checkAchievements();
+    }
+
+    // Update dynamic music chord based on theme/distance
+    if (frameCount % 60 === 0) {
+        updateMusicChord();
     }
 }
 
