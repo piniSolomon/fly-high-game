@@ -6,28 +6,28 @@ Continue improving — always making the game better.
 
 ## Tasks
 
-### Completed (v0.1.0 — v1.5.0)
-- [x] All v1.4.0 features (see git history)
-- [x] Particle diversity: sparkles (four-pointed spinning stars) and smoke (expanding puffs)
-- [x] Animated stars with gentle bobbing motion
+### Completed (v0.1.0 — v1.6.0)
+- [x] All v1.5.0 features (see git history)
+- [x] Sound volume control (+/- keys, master gain node, HUD display)
+- [x] Achievement gallery screen (Tab key, full list, unlock/lock display)
 
 ### Next Up
-- [ ] Add sound volume control (+ / - keys)
-- [ ] Add smooth theme transitions (lerp between background colors)
-- [ ] Add achievement gallery screen (press Tab to view all achievements)
+- [ ] Add smooth theme transitions (lerp between background colors at boundaries)
 - [ ] Add cloud/nebula parallax layer for visual depth
-- [ ] Add daily challenge mode (fixed seed, compete for best score)
-- [ ] Add screen edge bounce option
-- [ ] Add a minimap or radar showing nearby stars/obstacles
 - [ ] Add progressive obstacle coloring (darker at higher difficulty)
+- [ ] Add a minimap showing nearby stars
+- [ ] Add screen edge warning (vignette when near top/bottom)
+- [ ] Refactor game.js into modules (separate files for audio, rendering, state)
+- [ ] Add a settings persistence system (volume, music on/off saved to localStorage)
+- [ ] Performance optimization (object pooling for particles)
 
 ## Status
 
-v1.5.0 — 67 E2E tests. Sparkle/smoke particles, bobbing stars.
+v1.6.0 — 70 E2E tests. Volume control, achievement gallery. ~2100 lines of game code.
 
 ## Learnings
 
-- Particle type field is simple but effective for rendering variety
-- Smoke particles that grow while fading (size * (2 - life)) look natural
-- Star bobbing with unique phase offsets creates organic staggered motion
-- Adding a type parameter with default value keeps backward compatibility clean
+- Master gain node pattern cleanly controls all audio with one knob
+- Achievement gallery needs both locked and unlocked visual states to motivate
+- Tab key is a good non-conflicting key for menus on start screen
+- Volume clamping to 0-1 prevents audio distortion
