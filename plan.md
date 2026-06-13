@@ -2,31 +2,31 @@
 
 ## Current Goal
 
-Continue improving — always making the game better.
+The game is feature-complete. Continue iterating on polish and new ideas.
 
 ## Tasks
 
-### Completed (v0.1.0 — v2.1.0)
-- [x] All v2.0.0 features (see git history)
-- [x] Gamepad/controller support (stick + buttons, auto-detect, coexists with all input)
+### Completed (v0.1.0 — v2.2.0)
+- [x] All v2.1.0 features (see git history)
+- [x] Dynamic music (4 chord progressions matched to themes, smooth transitions)
 
-### Next Up
+### Next Up — Future Ideas
 - [ ] Refactor game.js into modules (audio, rendering, state, input)
 - [ ] Performance optimization (object pooling for particles)
-- [ ] Add dynamic music (chord changes with theme/difficulty)
 - [ ] Add player skins (unlock with achievements)
 - [ ] Add a replay system (watch last death)
 - [ ] Add seasonal events or daily challenges
 - [ ] Add endless mode variants (speed-only, stars-only)
 - [ ] Add multiplayer (split screen or network)
+- [ ] Add procedural terrain (mountains, floating islands)
 
 ## Status
 
-v2.1.0 — 83 E2E tests. Gamepad support. ~2700 lines of game code, 36 commits.
+v2.2.0 — 86 E2E tests. Dynamic music. 22 versions, 38 commits, ~2800 lines of game code.
 
 ## Learnings
 
-- navigator.getGamepads() must be polled each frame — no event-driven API
-- Deadzone (0.3) prevents stick drift from triggering movement
-- Start button needs debounce (held flag) to prevent rapid pause/unpause
-- Coexisting input methods (keyboard + mouse + touch + gamepad) works by OR-ing all key flags
+- linearRampToValueAtTime creates smooth frequency transitions without audio pops
+- Matching chord progressions to visual themes creates cohesive audiovisual experience
+- Checking chord change every 60 frames (~1s) is responsive enough without CPU waste
+- Four distinct chords (open fifth, major, dark fifth, warm) create varied emotional tones
