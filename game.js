@@ -3,7 +3,7 @@
 // A side-scrolling browser game where you fly and collect stars
 // ============================================
 
-const GAME_VERSION = '2.3.0';
+const GAME_VERSION = '2.4.0';
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -264,6 +264,76 @@ function toggleMusic() {
 
 // Screen flash
 var screenFlash = { alpha: 0, color: '#ffffff' };
+
+// Death camera (slow-mo effect on death)
+var deathCam = { active: false, timer: 0, duration: 40 };
+
+// Screen transition effect
+var themeTransition = { alpha: 0, lastThemeIdx: -1 };
+
+// Animated start screen
+var startScreenRockets = [];
+function initStartScreenRockets() {
+    startScreenRockets = [];
+    for (let i = 0; i < 3; i++) {
+        startScreenRockets.push({
+            x: Math.random() * canvas.width,
+            y: 50 + Math.random() * (canvas.height - 100),
+            speed: 0.8 + Math.random() * 1.2,
+            size: 8 + Math.random() * 6,
+            alpha: 0.1 + Math.random() * 0.15,
+        });
+    }
+}
+
+// Speed boost lanes
+var boostLanes = [];
+const BOOST_LANE_SPAWN_CHANCE = 0.002;
+const BOOST_SPEED_MULT = 1.8;
+const BOOST_DURATION = 90; // frames
+var activeBoost = 0; // remaining frames of boost
+
+// Shield-breaking obstacles (red pillars)
+var shieldBreakers = [];
+
+// Star constellations
+var constellations = [];
+var activeConstellation = null; // { stars: [...], collected: 0, total: N, bonus: N }
+
+// Boss encounters
+var boss = null; // { x, y, width, segments: [...], hp, phase }
+
+// Trail effects
+const TRAIL_EFFECTS = [
+    { id: 'default', name: 'Standard', color: null, unlock: null },
+    { id: 'fire',    name: 'Fire Trail', color: '#ff4400', unlock: 'dist_2000' },
+    { id: 'ice',     name: 'Ice Trail',  color: '#44ddff', unlock: 'stars_50' },
+    { id: 'gold',    name: 'Gold Trail',  color: '#ffd700', unlock: 'score_50' },
+    { id: 'neon',    name: 'Neon Trail',  color: '#44ff88', unlock: 'combo_5' },
+];
+const TRAIL_KEY = 'flyHighTrail';
+var currentTrailId = localStorage.getItem(TRAIL_KEY) || 'default';
+
+function getCurrentTrail() {
+    return TRAIL_EFFECTS.find(t => t.id === currentTrailId) || TRAIL_EFFECTS[0];
+}
+
+function isTrailUnlocked(trail) {
+    if (!trail.unlock) return true;
+    return unlockedAchievements.includes(trail.unlock);
+}
+
+// Daily challenge
+const DAILY_KEY = 'flyHighDaily';
+var dailyChallengeMode = false;
+var dailySeed = 0;
+
+// Endless mode variants
+var endlessVariant = 'normal'; // 'normal', 'no-gravity', 'double-speed'
+
+// Starting power-up (unlockable)
+const STARTING_PU_KEY = 'flyHighStartPU';
+var startingPowerup = localStorage.getItem(STARTING_PU_KEY) || 'none';
 
 function triggerFlash(color) {
     screenFlash = { alpha: 0.4, color: color || '#ffffff' };
@@ -920,6 +990,22 @@ function startGame() {
     sessionMaxCombo = 0;
     achievementPopup = null;
     coins = [];
+    deathCam = { active: false, timer: 0, duration: 40 };
+    themeTransition = { alpha: 0, lastThemeIdx: -1 };
+    boostLanes = [];
+    activeBoost = 0;
+    shieldBreakers = [];
+    constellations = [];
+    activeConstellation = null;
+    boss = null;
+    // Apply starting power-up if unlocked
+    if (startingPowerup !== 'none' && lifetimeStats.totalStars >= 50) {
+        activePowerup = { type: startingPowerup, timer: POWERUP_DURATION };
+    }
+    // Apply endless variant
+    if (endlessVariant === 'no-gravity') {
+        // gravity handled in update
+    }
     sessionStartTime = Date.now();
     lifetimeStats.gamesPlayed++;
     playStartSound();
@@ -969,6 +1055,7 @@ function die() {
     playDeathSound();
     shakeIntensity = 12;
     shakeDuration = 20;
+    deathCam = { active: true, timer: deathCam.duration, duration: 40, x: player.x, y: player.y };
     const distStr = Math.floor(distance).toLocaleString();
     const bestDistStr = Math.floor(bestDistance).toLocaleString();
     const newRecordTag = isNewBestDist ? ' NEW RECORD!' : '';
@@ -1014,6 +1101,10 @@ function update() {
     // Apply slow-mo power-up
     var effectiveSpeed = (activePowerup && activePowerup.type === 'slow')
         ? scrollSpeed * 0.5 : scrollSpeed;
+    // Apply boost lane effect
+    if (activeBoost > 0) effectiveSpeed *= BOOST_SPEED_MULT;
+    // Apply double-speed variant
+    if (endlessVariant === 'double-speed') effectiveSpeed *= 1.5;
     distance += effectiveSpeed * 0.1;
 
     // Distance record notification (only once per run)
@@ -1039,7 +1130,10 @@ function update() {
     }
 
     // Gravity (reduced when actively diving for better control)
-    player.vy += movingDown ? GRAVITY * 0.3 : GRAVITY;
+    // Gravity (skip in no-gravity endless variant)
+    if (endlessVariant !== 'no-gravity') {
+        player.vy += movingDown ? GRAVITY * 0.3 : GRAVITY;
+    }
 
     // Clamp vertical velocity
     player.vy = Math.max(-MAX_VELOCITY_Y, Math.min(MAX_VELOCITY_Y, player.vy));
@@ -1432,6 +1526,187 @@ function update() {
         checkAchievements();
     }
 
+    // --- Death camera decay ---
+    if (deathCam.active) {
+        deathCam.timer--;
+        if (deathCam.timer <= 0) deathCam.active = false;
+    }
+
+    // --- Speed boost lanes ---
+    if (Math.random() < BOOST_LANE_SPAWN_CHANCE && boostLanes.length < 2) {
+        boostLanes.push({
+            x: canvas.width + 10,
+            y: 40 + Math.random() * (canvas.height - 80),
+            width: 200 + Math.random() * 150,
+            height: 20,
+            pulse: Math.random() * Math.PI * 2,
+        });
+    }
+    for (let i = boostLanes.length - 1; i >= 0; i--) {
+        boostLanes[i].x -= effectiveSpeed;
+        if (boostLanes[i].x + boostLanes[i].width < 0) {
+            boostLanes.splice(i, 1);
+            continue;
+        }
+        // Check player overlap
+        const bl = boostLanes[i];
+        if (player.x > bl.x && player.x < bl.x + bl.width &&
+            player.y > bl.y && player.y < bl.y + bl.height) {
+            activeBoost = BOOST_DURATION;
+            score += 1;
+            scoreEl.textContent = `Score: ${score}`;
+            boostLanes.splice(i, 1);
+            emitSparkles(player.x, player.y, '#ffff44', 8);
+        }
+    }
+    if (activeBoost > 0) activeBoost--;
+
+    // --- Shield-breaking obstacles ---
+    if (distance > 1200 && Math.random() < 0.001 && shieldBreakers.length < 1) {
+        const margin = 60;
+        shieldBreakers.push({
+            x: canvas.width + 20,
+            y: margin + Math.random() * (canvas.height - margin * 2),
+            size: 25,
+            pulse: 0,
+        });
+    }
+    for (let i = shieldBreakers.length - 1; i >= 0; i--) {
+        shieldBreakers[i].x -= effectiveSpeed;
+        shieldBreakers[i].pulse += 0.05;
+        if (shieldBreakers[i].x < -30) { shieldBreakers.splice(i, 1); continue; }
+        const sb = shieldBreakers[i];
+        const sdx = player.x - sb.x;
+        const sdy = player.y - sb.y;
+        if (Math.sqrt(sdx*sdx + sdy*sdy) < PLAYER_SIZE + sb.size) {
+            shieldBreakers.splice(i, 1);
+            if (activePowerup && activePowerup.type === 'shield') {
+                activePowerup = null;
+                emitParticles(sb.x, sb.y, '#ff0000', 15);
+                triggerFlash('#ff0000');
+                comboPopups.push({ x: sb.x, y: sb.y - 15, text: 'SHIELD BROKEN!', life: 1.5, vy: -1.5 });
+            } else {
+                die();
+                return;
+            }
+        }
+    }
+
+    // --- Boss encounters every 3000m ---
+    if (!boss && Math.floor(distance) > 0 && Math.floor(distance) % 3000 < 5 && distance > 2990 && !zenMode) {
+        const segCount = 4 + Math.floor(distance / 5000);
+        const segments = [];
+        for (let s = 0; s < Math.min(segCount, 8); s++) {
+            segments.push({
+                y: (canvas.height / (segCount + 1)) * (s + 1),
+                size: 20 + Math.random() * 15,
+                phase: Math.random() * Math.PI * 2,
+                amplitude: 30 + Math.random() * 40,
+            });
+        }
+        boss = {
+            x: canvas.width + 100,
+            width: 300,
+            segments: segments,
+            active: true,
+            pulse: 0,
+        };
+        milestones.push({ text: 'BOSS INCOMING!', life: 2.0, y: canvas.height * 0.15 });
+    }
+    if (boss && boss.active) {
+        boss.x -= effectiveSpeed * 0.5;
+        boss.pulse += 0.03;
+        // Animate segments
+        for (const seg of boss.segments) {
+            seg.phase += 0.02;
+        }
+        // Boss leaves screen
+        if (boss.x + boss.width < -10) {
+            boss = null;
+            score += 25;
+            scoreEl.textContent = `Score: ${score}`;
+            milestones.push({ text: 'BOSS DEFEATED! +25', life: 2.0, y: canvas.height * 0.2 });
+        }
+        // Collision with boss segments
+        if (boss) {
+            const hasShieldNow = activePowerup && activePowerup.type === 'shield';
+            for (const seg of boss.segments) {
+                const by = seg.y + Math.sin(seg.phase) * seg.amplitude;
+                if (player.x > boss.x && player.x < boss.x + boss.width) {
+                    const bdx = player.x - (boss.x + boss.width / 2);
+                    const bdy = player.y - by;
+                    if (Math.sqrt(bdx*bdx + bdy*bdy) < PLAYER_SIZE + seg.size) {
+                        if (!hasShieldNow && !zenMode) {
+                            die();
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // --- Constellation spawning ---
+    if (!activeConstellation && Math.random() < 0.0005 && distance > 500) {
+        const count = 3 + Math.floor(Math.random() * 3);
+        const baseX = canvas.width + 50;
+        const baseY = 100 + Math.random() * (canvas.height - 200);
+        const cStars = [];
+        for (let c = 0; c < count; c++) {
+            cStars.push({
+                x: baseX + c * 60 + Math.random() * 30,
+                y: baseY + (Math.random() - 0.5) * 100,
+                collected: false,
+                size: 12,
+            });
+        }
+        activeConstellation = { stars: cStars, collected: 0, total: count, bonus: count * 5 };
+    }
+    if (activeConstellation) {
+        let allGone = true;
+        for (const cs of activeConstellation.stars) {
+            cs.x -= effectiveSpeed;
+            if (!cs.collected) {
+                allGone = false;
+                const cdx = player.x - cs.x;
+                const cdy = player.y - cs.y;
+                if (Math.sqrt(cdx*cdx + cdy*cdy) < PLAYER_SIZE + cs.size) {
+                    cs.collected = true;
+                    activeConstellation.collected++;
+                    emitSparkles(cs.x, cs.y, '#ffffff', 8);
+                    playCollectSound();
+                    if (activeConstellation.collected === activeConstellation.total) {
+                        score += activeConstellation.bonus;
+                        scoreEl.textContent = `Score: ${score}`;
+                        milestones.push({
+                            text: `CONSTELLATION! +${activeConstellation.bonus}`,
+                            life: 2.0,
+                            y: canvas.height * 0.25
+                        });
+                    }
+                }
+            }
+            if (cs.x < -50) allGone = true;
+        }
+        if (allGone) activeConstellation = null;
+    }
+
+    // --- Endless variant: no-gravity override ---
+    if (endlessVariant === 'no-gravity' && state === 'playing') {
+        // Already applied gravity above; counteract it
+        // (player controls freely without falling)
+    }
+
+    // --- Theme transition effect ---
+    const curThemeIdx = Math.floor(distance / 1500) % THEMES.length;
+    if (themeTransition.lastThemeIdx !== -1 && curThemeIdx !== themeTransition.lastThemeIdx) {
+        themeTransition.alpha = 0.5;
+    }
+    themeTransition.lastThemeIdx = curThemeIdx;
+    if (themeTransition.alpha > 0) {
+        themeTransition.alpha -= 0.01;
+    }
+
     // Update dynamic music chord based on theme/distance
     if (frameCount % 60 === 0) {
         updateMusicChord();
@@ -1541,11 +1816,14 @@ function drawPlayer() {
         const t = player.trail[i];
         const alpha = i / player.trail.length * 0.3;
         ctx.globalAlpha = alpha;
-        // Trail color changes with active power-up
+        // Trail color: power-up > custom trail > default
         let trailColor;
+        const customTrail = getCurrentTrail();
         if (activePowerup) {
             const puInfo = POWERUP_TYPES.find(t => t.type === activePowerup.type);
             trailColor = puInfo ? puInfo.color : '#4488ff';
+        } else if (customTrail.color) {
+            trailColor = customTrail.color;
         } else {
             trailColor = isThrusting ? '#ff8800' : '#4488ff';
         }
@@ -2010,6 +2288,197 @@ function drawEdgeWarning() {
     }
 }
 
+function drawBoostLanes() {
+    for (const bl of boostLanes) {
+        const pulse = Math.sin(frameCount * 0.08 + bl.pulse) * 0.2 + 0.6;
+        ctx.globalAlpha = pulse * 0.4;
+        ctx.fillStyle = '#ffff44';
+        ctx.fillRect(bl.x, bl.y, bl.width, bl.height);
+        // Glow edges
+        ctx.shadowColor = '#ffff44';
+        ctx.shadowBlur = 15;
+        ctx.fillRect(bl.x, bl.y, bl.width, 2);
+        ctx.fillRect(bl.x, bl.y + bl.height - 2, bl.width, 2);
+        ctx.shadowBlur = 0;
+        ctx.globalAlpha = 1;
+        // Arrow markers
+        ctx.fillStyle = 'rgba(255, 255, 100, 0.6)';
+        ctx.font = '14px sans-serif';
+        ctx.textAlign = 'center';
+        for (let ax = bl.x + 30; ax < bl.x + bl.width - 20; ax += 50) {
+            ctx.fillText('▸', ax, bl.y + bl.height / 2 + 5);
+        }
+        ctx.textAlign = 'left';
+    }
+}
+
+function drawShieldBreakers() {
+    for (const sb of shieldBreakers) {
+        const pulse = Math.sin(sb.pulse) * 0.2 + 0.8;
+        ctx.save();
+        ctx.translate(sb.x, sb.y);
+        ctx.rotate(sb.pulse * 0.5);
+        ctx.shadowColor = '#ff0000';
+        ctx.shadowBlur = 20;
+        // Spiky red shape
+        ctx.fillStyle = `rgba(255, 0, 0, ${pulse})`;
+        ctx.beginPath();
+        for (let i = 0; i < 8; i++) {
+            const r = i % 2 === 0 ? sb.size : sb.size * 0.5;
+            const a = (i * Math.PI * 2) / 8;
+            if (i === 0) ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+            else ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        // Skull icon
+        ctx.fillStyle = '#ffcccc';
+        ctx.font = 'bold 12px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('X', 0, 0);
+        ctx.restore();
+    }
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+}
+
+function drawBoss() {
+    if (!boss || !boss.active) return;
+    // Warning zone
+    ctx.fillStyle = 'rgba(255, 0, 0, 0.03)';
+    ctx.fillRect(boss.x, 0, boss.width, canvas.height);
+    // Segments (pulsing barriers)
+    for (const seg of boss.segments) {
+        const by = seg.y + Math.sin(seg.phase) * seg.amplitude;
+        const pulse = Math.sin(boss.pulse + seg.phase) * 0.3 + 0.7;
+        ctx.fillStyle = `rgba(200, 50, 50, ${pulse})`;
+        ctx.shadowColor = '#ff4444';
+        ctx.shadowBlur = 15;
+        ctx.beginPath();
+        ctx.arc(boss.x + boss.width / 2, by, seg.size, 0, Math.PI * 2);
+        ctx.fill();
+        // Connection lines between segments
+        ctx.strokeStyle = 'rgba(255, 100, 100, 0.3)';
+        ctx.lineWidth = 2;
+    }
+    ctx.shadowBlur = 0;
+    // Draw connection lines
+    ctx.strokeStyle = 'rgba(255, 100, 100, 0.2)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 0; i < boss.segments.length; i++) {
+        const by = boss.segments[i].y + Math.sin(boss.segments[i].phase) * boss.segments[i].amplitude;
+        if (i === 0) ctx.moveTo(boss.x + boss.width / 2, by);
+        else ctx.lineTo(boss.x + boss.width / 2, by);
+    }
+    ctx.stroke();
+}
+
+function drawConstellations() {
+    if (!activeConstellation) return;
+    // Draw lines between constellation stars
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath();
+    for (let i = 0; i < activeConstellation.stars.length; i++) {
+        const cs = activeConstellation.stars[i];
+        if (i === 0) ctx.moveTo(cs.x, cs.y);
+        else ctx.lineTo(cs.x, cs.y);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // Draw stars
+    for (const cs of activeConstellation.stars) {
+        if (cs.collected) continue;
+        ctx.save();
+        ctx.translate(cs.x, cs.y);
+        ctx.shadowColor = '#ffffff';
+        ctx.shadowBlur = 15;
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        for (let i = 0; i < 8; i++) {
+            const r = i % 2 === 0 ? cs.size : cs.size * 0.4;
+            const a = (i * Math.PI * 2) / 8 + frameCount * 0.02;
+            if (i === 0) ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+            else ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.restore();
+    }
+    // Progress indicator
+    if (activeConstellation.collected > 0) {
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 12px Segoe UI, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.globalAlpha = 0.7;
+        const firstStar = activeConstellation.stars[0];
+        ctx.fillText(
+            `${activeConstellation.collected}/${activeConstellation.total}`,
+            firstStar.x, firstStar.y - 20
+        );
+        ctx.globalAlpha = 1;
+        ctx.textAlign = 'left';
+    }
+}
+
+function drawThemeTransition() {
+    if (themeTransition.alpha <= 0) return;
+    ctx.globalAlpha = themeTransition.alpha;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.globalAlpha = 1;
+}
+
+function drawDeathCam() {
+    if (!deathCam.active) return;
+    const progress = 1 - (deathCam.timer / deathCam.duration);
+    // Vignette effect
+    ctx.globalAlpha = progress * 0.4;
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.globalAlpha = 1;
+}
+
+function drawStartScreenAnimation() {
+    // Rockets flying in background
+    for (const r of startScreenRockets) {
+        r.x += r.speed;
+        if (r.x > canvas.width + 20) {
+            r.x = -20;
+            r.y = 50 + Math.random() * (canvas.height - 100);
+        }
+        ctx.globalAlpha = r.alpha;
+        ctx.fillStyle = '#4488ff';
+        ctx.beginPath();
+        ctx.moveTo(r.x + r.size, r.y);
+        ctx.lineTo(r.x - r.size * 0.5, r.y - r.size * 0.4);
+        ctx.lineTo(r.x - r.size * 0.3, r.y);
+        ctx.lineTo(r.x - r.size * 0.5, r.y + r.size * 0.4);
+        ctx.closePath();
+        ctx.fill();
+        // Tiny trail
+        ctx.fillStyle = 'rgba(255, 136, 0, 0.3)';
+        ctx.fillRect(r.x - r.size * 0.8, r.y - 1, r.size * 0.4, 2);
+    }
+    ctx.globalAlpha = 1;
+}
+
+function drawBoostHUD() {
+    if (activeBoost <= 0) return;
+    ctx.fillStyle = '#ffff44';
+    ctx.globalAlpha = 0.7;
+    ctx.font = 'bold 14px Segoe UI, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText('BOOST!', canvas.width - 20, 125);
+    ctx.globalAlpha = 1;
+    ctx.textAlign = 'left';
+}
+
 function drawScreenFlash() {
     if (screenFlash.alpha <= 0) return;
     ctx.globalAlpha = screenFlash.alpha;
@@ -2418,17 +2887,23 @@ function gameLoop() {
         } else if (showingStats) {
             drawStatsScreen();
         } else {
+            drawStartScreenAnimation();
             drawStartScreen();
         }
     } else {
         drawObstacles();
         drawObstacleWarnings();
+        drawBoostLanes();
         drawStars();
+        drawConstellations();
         drawPowerups();
         drawCoins();
+        drawShieldBreakers();
+        drawBoss();
         drawPlayer();
         drawActivePowerupHUD();
         drawHUD();
+        drawBoostHUD();
         drawComboHUD();
         drawComboPopups();
         drawMilestones();
@@ -2437,6 +2912,8 @@ function gameLoop() {
 
     drawParticles();
     drawScreenFlash();
+    drawThemeTransition();
+    drawDeathCam();
     drawEdgeWarning();
 
     if (shakeDuration > 0 && shakeIntensity > 0) {
@@ -2449,4 +2926,5 @@ function gameLoop() {
 // --- Init ---
 showMessage('');
 messageEl.classList.add('hidden');
+initStartScreenRockets();
 gameLoop();

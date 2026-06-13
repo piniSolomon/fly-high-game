@@ -89,7 +89,7 @@ Write a progress report file every session/day:
 - **Format:** See the template in `progress/TEMPLATE.md`
 - **When:** Update throughout the session. Write a summary at the end of each major milestone.
 
-**Channel:** MD files only (no external notifications).
+**Channel:** Telegram + MD files. Send progress summaries via Telegram after each milestone. Always also write to MD files.
 
 ---
 

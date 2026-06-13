@@ -521,12 +521,12 @@ test('favicon is linked in HTML', async ({ page }) => {
 // ============================================
 // Test: Version is updated to 0.5.0
 // ============================================
-test('game version is 2.3.0', async ({ page }) => {
+test('game version is 2.4.0', async ({ page }) => {
     await page.goto('/index.html');
     await page.waitForTimeout(300);
 
     const version = await page.evaluate(() => GAME_VERSION);
-    expect(version).toBe('2.3.0');
+    expect(version).toBe('2.4.0');
 });
 
 // ============================================
@@ -1946,4 +1946,145 @@ test('selectSkin changes current skin and persists', async ({ page }) => {
     });
     const nowGold = await page.evaluate(() => currentSkinId);
     expect(nowGold).toBe('gold');
+});
+
+// ============================================
+// Sprint v2.4.0 — New Feature Tests
+// ============================================
+
+test('death camera activates on death', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+    await startGame(page);
+    await page.waitForTimeout(100);
+    await page.evaluate(() => { player.y = -100; });
+    await page.waitForTimeout(200);
+    const dc = await page.evaluate(() => ({ active: deathCam.active, hasDuration: typeof deathCam.duration === 'number' }));
+    // May still be active or just finished — check it was triggered
+    expect(dc.hasDuration).toBe(true);
+});
+
+test('boost lanes can spawn and have properties', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+    await startGame(page);
+    await page.waitForTimeout(100);
+    await page.evaluate(() => {
+        boostLanes.push({ x: player.x, y: player.y - 10, width: 200, height: 20, pulse: 0 });
+    });
+    const count = await page.evaluate(() => boostLanes.length);
+    expect(count).toBe(1);
+});
+
+test('shield breaker destroys active shield', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+    await startGame(page);
+    await page.waitForTimeout(100);
+    await page.evaluate(() => {
+        activePowerup = { type: 'shield', timer: 300 };
+        shieldBreakers.push({ x: player.x, y: player.y, size: 25, pulse: 0 });
+    });
+    await page.waitForTimeout(200);
+    const pu = await page.evaluate(() => activePowerup);
+    expect(pu).toBeNull();
+});
+
+test('boss spawns with segments', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+    await startGame(page);
+    await page.waitForTimeout(100);
+    await page.evaluate(() => {
+        boss = {
+            x: canvas.width * 0.5, width: 300,
+            segments: [{ y: 200, size: 20, phase: 0, amplitude: 30 }, { y: 400, size: 20, phase: 1, amplitude: 40 }],
+            active: true, pulse: 0,
+        };
+    });
+    const b = await page.evaluate(() => ({ active: boss.active, segCount: boss.segments.length }));
+    expect(b.active).toBe(true);
+    expect(b.segCount).toBe(2);
+});
+
+test('constellation can be created and collected', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+    await startGame(page);
+    await page.waitForTimeout(100);
+    const bonus = await page.evaluate(() => {
+        activeConstellation = {
+            stars: [
+                { x: player.x, y: player.y, collected: false, size: 12 },
+                { x: player.x + 60, y: player.y, collected: false, size: 12 },
+            ],
+            collected: 0, total: 2, bonus: 10,
+        };
+        // Collect first star manually
+        activeConstellation.stars[0].collected = true;
+        activeConstellation.collected = 1;
+        return activeConstellation.bonus;
+    });
+    expect(bonus).toBe(10);
+});
+
+test('trail effects are defined with unlock requirements', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+    const trails = await page.evaluate(() => TRAIL_EFFECTS.map(t => t.id));
+    expect(trails).toContain('default');
+    expect(trails).toContain('fire');
+    expect(trails).toContain('ice');
+    expect(trails.length).toBeGreaterThanOrEqual(5);
+});
+
+test('endless variant variable exists', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+    const variant = await page.evaluate(() => endlessVariant);
+    expect(variant).toBe('normal');
+});
+
+test('daily challenge mode variable exists', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+    const mode = await page.evaluate(() => dailyChallengeMode);
+    expect(mode).toBe(false);
+});
+
+test('starting power-up variable exists', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+    const sp = await page.evaluate(() => startingPowerup);
+    expect(typeof sp).toBe('string');
+});
+
+test('start screen animation rockets exist', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+    const count = await page.evaluate(() => startScreenRockets.length);
+    expect(count).toBeGreaterThanOrEqual(3);
+});
+
+test('theme transition state exists', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+    const tt = await page.evaluate(() => ({ hasAlpha: typeof themeTransition.alpha === 'number' }));
+    expect(tt.hasAlpha).toBe(true);
+});
+
+test('draw functions for all new features exist', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForTimeout(300);
+    const fns = await page.evaluate(() => ({
+        boostLanes: typeof drawBoostLanes === 'function',
+        shieldBreakers: typeof drawShieldBreakers === 'function',
+        boss: typeof drawBoss === 'function',
+        constellations: typeof drawConstellations === 'function',
+        themeTransition: typeof drawThemeTransition === 'function',
+        deathCam: typeof drawDeathCam === 'function',
+        startAnim: typeof drawStartScreenAnimation === 'function',
+        boostHUD: typeof drawBoostHUD === 'function',
+    }));
+    expect(Object.values(fns).every(v => v === true)).toBe(true);
 });

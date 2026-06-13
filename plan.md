@@ -2,31 +2,40 @@
 
 ## Current Goal
 
-The game is feature-complete and polished. Continue iterating with new ideas.
+MASSIVE FEATURE SPRINT — add all 12 planned features, test everything, ship v3.0.0.
 
 ## Tasks
 
 ### Completed (v0.1.0 — v2.3.0)
-- [x] All v2.2.0 features (see git history)
-- [x] Player skins (6 skins, unlocked via achievements, [ ] to cycle, persists)
+- [x] All previous features (see git history — 23 versions, 89 tests)
 
-### Next Up — Future Ideas
-- [ ] Refactor game.js into modules (audio, rendering, state, input)
-- [ ] Performance optimization (object pooling for particles)
-- [ ] Add a replay system (watch last death)
-- [ ] Add seasonal events or daily challenges
-- [ ] Add endless mode variants (speed-only, stars-only)
-- [ ] Add multiplayer (split screen or network)
-- [ ] Add procedural terrain (mountains, floating islands)
-- [ ] Add a skin preview on start screen
+### Sprint — New Features (v2.4.0 → v3.0.0)
+- [ ] Boss encounters every 3000m (large pulsing barrier patterns)
+- [ ] Speed boost lanes (glowing horizontal streaks, temp speed + bonus)
+- [ ] Star constellations (collect pattern for big bonus)
+- [ ] Shield-breaking obstacles (red, destroy shield on contact)
+- [ ] Daily challenge mode (seeded run, same obstacles each day)
+- [ ] Endless mode variants (no-gravity, double-speed)
+- [ ] Unlockable starting power-ups (spend lifetime stars)
+- [ ] Ghost replay (faint silhouette of best run)
+- [ ] Screen transition effects between theme zones
+- [ ] Collectible trail effects (different exhaust trails)
+- [ ] Death camera (slow-mo zoom on death)
+- [ ] Animated start screen (rocket flying in background)
+
+### After Sprint
+- [ ] E2E tests for every new feature
+- [ ] All tests passing before completion promise
 
 ## Status
 
-v2.3.0 — 89 E2E tests. Player skins. 23 versions, 40 commits, ~2900 lines of game code.
+SPRINT IN PROGRESS — starting from v2.3.0, targeting v3.0.0.
+
+## Reporting
+
+- Telegram: active (send progress after each feature)
+- MD files: always
 
 ## Learnings
 
-- Achievement-gated unlocks add motivation to chase specific goals
-- Rainbow skin with hue cycling needs both body + stripe to animate cohesively
-- Fin color derived from body via lerpColor darkening works for all skin colors
-- HSL-based rainbow needs special handling since lerpColor expects hex
+(carried from previous iterations — see git history)
