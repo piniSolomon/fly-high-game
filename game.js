@@ -3,7 +3,7 @@
 // A side-scrolling browser game where you fly and collect stars
 // ============================================
 
-const GAME_VERSION = '2.5.0';
+const GAME_VERSION = '2.6.0';
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -1060,6 +1060,10 @@ function die() {
     emitSmoke(player.x, player.y, 8);
     playDeathSound();
     crazyGameplayStop();
+    // Show interstitial ad every 3rd death
+    if (lifetimeStats.totalDeaths > 0 && lifetimeStats.totalDeaths % 3 === 0) {
+        showInterstitialAd();
+    }
     shakeIntensity = 12;
     shakeDuration = 20;
     deathCam = { active: true, timer: deathCam.duration, duration: 40, x: player.x, y: player.y };
@@ -2989,3 +2993,45 @@ async function showCrazyAd(type) {
 
 // Initialize SDK on load
 initCrazyGamesSDK();
+
+// ============================================
+// AdSense Integration
+// ============================================
+
+function showInterstitialAd(callback) {
+    if (window.adsbygoogle && window.adsbygoogle.loaded) {
+        adBreak({
+            type: 'next',
+            name: 'game-over',
+            beforeAd: function() { /* game already paused on death */ },
+            afterAd: function() { if (callback) callback(); },
+            adBreakDone: function(info) {
+                if (info.breakStatus !== 'viewed' && callback) callback();
+            }
+        });
+    } else {
+        if (callback) callback();
+    }
+}
+
+function showRewardedAd(rewardCallback) {
+    if (window.adsbygoogle && window.adsbygoogle.loaded) {
+        adBreak({
+            type: 'reward',
+            name: 'revive-shield',
+            beforeReward: function(showAdFn) { showAdFn(); },
+            adViewed: function() {
+                if (rewardCallback) rewardCallback();
+            },
+            adDismissed: function() {
+                // No reward — player skipped
+            },
+            adBreakDone: function(info) {
+                console.log('Rewarded ad status:', info.breakStatus);
+            }
+        });
+    } else {
+        // Dev/localhost — grant reward directly for testing
+        if (rewardCallback) rewardCallback();
+    }
+}
