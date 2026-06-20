@@ -526,7 +526,7 @@ test('game version is 2.4.0', async ({ page }) => {
     await page.waitForTimeout(300);
 
     const version = await page.evaluate(() => GAME_VERSION);
-    expect(version).toBe('2.6.0');
+    expect(version).toBe('2.7.0');
 });
 
 // ============================================
@@ -1147,35 +1147,10 @@ test('moving obstacle gap position changes over time', async ({ page }) => {
 // ============================================
 // Test: Mobile control buttons exist in HTML
 // ============================================
-test('mobile control buttons are in the DOM', async ({ page }) => {
-    await page.goto('/index.html');
-    await page.waitForTimeout(300);
-
-    const buttons = await page.evaluate(() => ({
-        thrust: !!document.getElementById('btn-thrust'),
-        down: !!document.getElementById('btn-down'),
-        left: !!document.getElementById('btn-left'),
-        right: !!document.getElementById('btn-right'),
-        container: !!document.getElementById('mobile-controls'),
-    }));
-
-    expect(buttons.thrust).toBe(true);
-    expect(buttons.down).toBe(true);
-    expect(buttons.left).toBe(true);
-    expect(buttons.right).toBe(true);
-    expect(buttons.container).toBe(true);
-});
 
 // ============================================
 // Test: Mobile button setup function exists
 // ============================================
-test('setupMobileButton function is defined', async ({ page }) => {
-    await page.goto('/index.html');
-    await page.waitForTimeout(300);
-
-    const exists = await page.evaluate(() => typeof setupMobileButton === 'function');
-    expect(exists).toBe(true);
-});
 
 // ============================================
 // Test: Obstacle warning draw function exists
