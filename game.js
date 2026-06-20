@@ -3,7 +3,7 @@
 // A side-scrolling browser game where you fly and collect stars
 // ============================================
 
-const GAME_VERSION = '2.4.0';
+const GAME_VERSION = '2.5.0';
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -522,6 +522,7 @@ function checkAchievements() {
         if (def.check(stats)) {
             unlockedAchievements.push(def.id);
             localStorage.setItem(ACHIEVEMENTS_KEY, JSON.stringify(unlockedAchievements));
+            crazyHappytime();
             achievementPopup = { name: def.name, desc: def.desc, life: 3.0 };
         }
     }
@@ -1009,6 +1010,11 @@ function startGame() {
     sessionStartTime = Date.now();
     lifetimeStats.gamesPlayed++;
     playStartSound();
+    crazyGameplayStart();
+    // Show midgame ad every 3rd game
+    if (lifetimeStats.gamesPlayed > 0 && lifetimeStats.gamesPlayed % 3 === 0) {
+        showCrazyAd("midgame");
+    }
     if (!musicPlaying && musicAutoStart) startMusic();
 
     // Spawn initial stars ahead
@@ -1053,6 +1059,7 @@ function die() {
     emitParticles(player.x, player.y, '#ff4444', 30);
     emitSmoke(player.x, player.y, 8);
     playDeathSound();
+    crazyGameplayStop();
     shakeIntensity = 12;
     shakeDuration = 20;
     deathCam = { active: true, timer: deathCam.duration, duration: 40, x: player.x, y: player.y };
@@ -2928,3 +2935,57 @@ showMessage('');
 messageEl.classList.add('hidden');
 initStartScreenRockets();
 gameLoop();
+
+// ============================================
+// CrazyGames SDK Integration
+// ============================================
+
+var crazySdkReady = false;
+
+async function initCrazyGamesSDK() {
+    try {
+        if (window.CrazyGames && window.CrazyGames.SDK) {
+            await window.CrazyGames.SDK.init();
+            crazySdkReady = true;
+            console.log('CrazyGames SDK initialized');
+            // Signal game has finished loading
+            if (window.CrazyGames.SDK.game) {
+                window.CrazyGames.SDK.game.sdkGameLoadingStop();
+            }
+        }
+    } catch (e) {
+        console.log('CrazyGames SDK not available (running outside CrazyGames)');
+        crazySdkReady = false;
+    }
+}
+
+function crazyGameplayStart() {
+    if (crazySdkReady && window.CrazyGames && window.CrazyGames.SDK && window.CrazyGames.SDK.game) {
+        try { window.CrazyGames.SDK.game.gameplayStart(); } catch(e) {}
+    }
+}
+
+function crazyGameplayStop() {
+    if (crazySdkReady && window.CrazyGames && window.CrazyGames.SDK && window.CrazyGames.SDK.game) {
+        try { window.CrazyGames.SDK.game.gameplayStop(); } catch(e) {}
+    }
+}
+
+function crazyHappytime() {
+    if (crazySdkReady && window.CrazyGames && window.CrazyGames.SDK && window.CrazyGames.SDK.game) {
+        try { window.CrazyGames.SDK.game.happytime(); } catch(e) {}
+    }
+}
+
+async function showCrazyAd(type) {
+    if (!crazySdkReady || !window.CrazyGames || !window.CrazyGames.SDK || !window.CrazyGames.SDK.ad) return false;
+    try {
+        const result = await window.CrazyGames.SDK.ad.requestAd(type || 'midgame');
+        return result !== 'error';
+    } catch(e) {
+        return false;
+    }
+}
+
+// Initialize SDK on load
+initCrazyGamesSDK();

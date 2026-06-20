@@ -526,7 +526,7 @@ test('game version is 2.4.0', async ({ page }) => {
     await page.waitForTimeout(300);
 
     const version = await page.evaluate(() => GAME_VERSION);
-    expect(version).toBe('2.4.0');
+    expect(version).toBe('2.5.0');
 });
 
 // ============================================
